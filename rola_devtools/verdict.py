@@ -3,7 +3,8 @@
 Three gates, and a regression needs all three:
 
 1. EFFECT SIZE -- the candidate's median above :func:`threshold_ms`, which is the baseline's own median plus three sigmas
-   of its own spread (sigma from the interquartile range). Never a flat percentage.
+   of its own spread (sigma from the interquartile range), and never of a spread smaller than the stopwatch can resolve
+   (:func:`resolution`). Never a flat percentage.
 2. SIGNIFICANCE -- :func:`paired_verdict`: an exact Wilcoxon signed-rank test over the per-round differences, candidate
    minus baseline, that one interleaved session produced. Paired, because the interleaving paid for the pairing; exact,
    because the round counts are single digits.
@@ -39,6 +40,15 @@ MIN_BASELINE = 3
 def iqr(values: list[float]) -> float:
     ordered = sorted(values)
     return ordered[int(0.75 * len(ordered))] - ordered[int(0.25 * len(ordered))]
+
+
+def resolution(values: list[float]) -> float:
+    """The stopwatch's resolution as the samples themselves show it: the smallest gap between two distinct values (0.0
+    below two). A device-event timer quantizes, so sessions of a small kernel can land on one value every time; their
+    spread is then zero, a threshold at the median, and the next tick over it. Measured on every judgement rather than
+    stored, because it is a property of the stopwatch and the box, and a stored copy could disagree with the samples."""
+    distinct = sorted(set(values))
+    return min((b - a for a, b in zip(distinct, distinct[1:], strict=False)), default=0.0)
 
 
 def threshold_ms(median_ms: float, iqr_ms: float) -> float:
@@ -133,7 +143,8 @@ def classify(baseline: list[list[float]], runs: list[list[float]], *, paired_dif
                 "reason": f"fewer than {MIN_BASELINE} baseline sessions, or no run to judge"}
     medians = [statistics.median(samples) for samples in baseline]
     base_median, base_iqr = statistics.median(medians), iqr(medians)
-    limit = threshold_ms(base_median, base_iqr)
+    tick = resolution([value for samples in baseline + runs for value in samples])
+    limit = threshold_ms(base_median, max(base_iqr, tick))
     run_medians = [statistics.median(samples) for samples in runs]
     got = run_medians[-1]
     persistence = classify_flags([m > limit for m in medians] + [m > limit for m in run_medians])
@@ -145,5 +156,6 @@ def classify(baseline: list[list[float]], runs: list[list[float]], *, paired_dif
     else:
         verdict = "suspicious" if persistence == "suspicious" else "no_regression"
     return {"verdict": verdict, "median_ms": got, "limit_ms": limit, "baseline_median_ms": base_median,
-            "baseline_iqr_ms": base_iqr, "n_baseline": len(baseline), "n_runs": len(runs), "persistence": persistence,
+            "baseline_iqr_ms": base_iqr, "resolution_ms": tick, "floored_at_resolution": tick > base_iqr,
+            "n_baseline": len(baseline), "n_runs": len(runs), "persistence": persistence,
             "significance": significance}

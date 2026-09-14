@@ -72,6 +72,13 @@ class ThreeGates(unittest.TestCase):
                          "no_regression")
         self.assertEqual(classify(BASELINE[:2], [SLOW])["verdict"], "insufficient_data")
 
+    def test_a_spread_of_zero_is_floored_at_the_stopwatch_resolution(self):
+        ticks = [[1.0, 1.0, 1.0625]] * 5
+        got = classify(ticks, [[1.0625, 1.0625, 1.0]] * 2, paired_diffs=[0.0625] * MIN_ROUNDS)
+        self.assertEqual((got["verdict"], got["resolution_ms"], got["floored_at_resolution"]), ("no_regression", 0.0625, True))
+        slow = classify(ticks, [[1.5, 1.5, 1.5625]] * 2, paired_diffs=[0.5] * MIN_ROUNDS)
+        self.assertEqual(slow["verdict"], "regression")
+
 
 if __name__ == "__main__":
     unittest.main()
