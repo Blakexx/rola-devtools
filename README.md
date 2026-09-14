@@ -8,6 +8,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
 | `rola_devtools.interleave` | the interleaving driver: every library's arms at one comparison point, timed one call at a time |
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
+| `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 
 ## The public mirror
 
