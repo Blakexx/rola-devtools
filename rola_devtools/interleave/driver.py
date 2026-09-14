@@ -93,11 +93,10 @@ def interleave(point: dict, arms: list[ArmSpec], *, matching: str, rounds: int =
                 workers[spec.key()] = _Worker(spec)
         built: dict[str, dict] = {}
         for key, worker in workers.items():
-            reply = worker.ask({"op": "prepare", "point": point}, worker.spec.label)
-            for spec in (s for s in arms if s.key() == key):
-                if spec.arm not in reply["arms"]:
-                    raise ValueError(f"{spec.label}: {spec.provider} has no arm {spec.arm!r} at this point; it has "
-                                     f"{sorted(reply['arms'])}")
+            mine = [s for s in arms if s.key() == key]
+            reply = worker.ask({"op": "prepare", "point": point, "arms": sorted({s.arm for s in mine})},
+                               ", ".join(s.label for s in mine))
+            for spec in mine:
                 built[spec.label] = reply["arms"][spec.arm]
         instruments = {built[label]["instrument"] for label in labels}
         if len(instruments) != 1:

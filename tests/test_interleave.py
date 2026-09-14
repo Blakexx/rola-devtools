@@ -56,8 +56,10 @@ class Interleave(unittest.TestCase):
             interleave({"tokens": 8}, [spec("a", "fast")], matching="test", reps=4)
         with self.assertRaisesRegex(ValueError, "one stopwatch"):
             interleave({"tokens": 8}, [spec("a", "fast"), spec("b", "other_clock")], matching="test", rounds=1, reps=1)
-        with self.assertRaisesRegex(ValueError, "no arm 'missing'"):
+        with self.assertRaisesRegex(RuntimeError, r"no arm \['missing'\]"):
             interleave({"tokens": 8}, [spec("a", "missing")], matching="test", rounds=1, reps=1)
+        with self.assertRaisesRegex(RuntimeError, "carries no such kernel"):
+            interleave({"tokens": 8}, [spec("a", "fast"), spec("u", "unbuildable")], matching="test", rounds=1, reps=1)
         with self.assertRaisesRegex(RuntimeError, "broken: fake_provider:arms refused call"):
             interleave({"tokens": 8}, [spec("broken", "broken")], matching="test", rounds=1, reps=1)
         with self.assertRaisesRegex(ValueError, "unique"):

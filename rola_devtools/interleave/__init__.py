@@ -2,9 +2,9 @@
 
 A COMPARISON is a point -- what is held equal across the libraries (the tokens, the value width, the dtype, the
 capacity) -- and the matching rule that makes it fair, named. Each library realizes the point as its OWN native cell
-through a PROVIDER, `module:function`, called with the point and returning its arms by name (:class:`Arm`): the cell it
-built and the call that runs one timed unit. Arms are never asked to share a cell; each result row keeps the point and
-its cell.
+through a PROVIDER, `module:function`, called with the point and returning a builder per arm name; the worker builds
+only the arms a comparison asks for, each an :class:`Arm`: the cell it built and the call that runs one timed unit. Arms
+are never asked to share a cell; each result row keeps the point and its cell.
 
 The driver knows no library. It starts one WORKER process per provider environment (a python, a directory, an
 environment; two builds of one library are two workers), prepares every arm, warms each past the floor, and then, for

@@ -41,9 +41,10 @@ python -m rola_devtools.mirror --public      # the public repository
 
 A **comparison** is a point (what is held equal across the libraries: tokens, value width, dtype, capacity) and the
 matching rule that makes it fair, named. Each library realizes the point as its own native cell through a **provider**,
-`module:function`, which takes the point and returns its arms by name. An `Arm` is the cell the library built and a call
-that runs one timed unit, returning its elapsed milliseconds by the stopwatch the arm names, the device synchronized.
-Arms are never asked to share a cell; every result row keeps the point and its own cell.
+`module:function`, which takes the point and returns a builder per arm name; the worker builds only the arms a
+comparison asks for, so an arm the library cannot build refuses by name without blocking the others. An `Arm` is the
+cell the library built and a call that runs one timed unit, returning its elapsed milliseconds by the stopwatch the arm
+names, the device synchronized. Arms are never asked to share a cell; every result row keeps the point and its own cell.
 
 The driver knows no library. It starts one worker process per provider environment (a python, a directory, an
 environment: two builds of one library are two workers), prepares every arm, warms each past the floor of 10 launches,

@@ -5,7 +5,7 @@
 The protocol is JSON lines on the process's original stdout; anything the provider or a native library prints goes to
 stderr, so a print can never corrupt a reply. Requests and replies:
 
-    {"op": "prepare", "point": {...}}  ->  {"arms": {name: {"cell": {...}, "instrument": "..."}}}
+    {"op": "prepare", "point": {...}, "arms": [name, ...]}  ->  {"arms": {name: {"cell": {...}, "instrument": "..."}}}
     {"op": "call", "arm": name}        ->  {"ms": <the arm's own elapsed milliseconds>}
     {"op": "exit"}                     ->  (the process exits)
 
@@ -23,7 +23,7 @@ from collections.abc import Callable
 from .arm import Arm
 
 
-def load(provider: str) -> Callable[[dict], dict[str, Arm]]:
+def load(provider: str) -> Callable[[dict], dict[str, Callable[[], Arm]]]:
     module, _, function = provider.partition(":")
     if not module or not function:
         raise ValueError(f"a provider is module:function, got {provider!r}")
@@ -43,7 +43,11 @@ def serve(provider: str) -> None:
         try:
             if request["op"] == "prepare":
                 make = make or load(provider)
-                arms = make(request["point"])
+                builders = make(request["point"])
+                missing = sorted(set(request["arms"]) - set(builders))
+                if missing:
+                    raise KeyError(f"no arm {missing} at this point; the provider has {sorted(builders)}")
+                arms = {name: builders[name]() for name in request["arms"]}
                 reply = {"arms": {name: {"cell": arm.cell, "instrument": arm.instrument} for name, arm in arms.items()}}
             elif request["op"] == "call":
                 reply = {"ms": float(arms[request["arm"]].call())}

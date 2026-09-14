@@ -1,4 +1,4 @@
-"""The one type a provider returns: an arm."""
+"""The one type a provider's builders return: an arm."""
 from __future__ import annotations
 
 from collections.abc import Callable
