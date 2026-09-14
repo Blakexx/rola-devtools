@@ -38,22 +38,29 @@ class Interleave(unittest.TestCase):
         self.assertEqual(Counter(order[0::2])["fast|t64"] + Counter(order[0::2])["slow|t64"], 15)
         self.assertGreater(len({tuple(order[i:i + 2]) for i in range(0, len(order), 2)}), 1)
         slow = result["arms"][1]
-        self.assertEqual(slow["paired"]["ratio_median"], 2.0)
-        self.assertEqual(slow["paired"]["round_diffs_ms"], [1.0, 1.0, 1.0])
+        self.assertEqual(slow["paired"][0]["ratio_median"], 2.0)
+        self.assertEqual(slow["paired"][0]["round_diffs_ms"], [1.0, 1.0, 1.0])
         self.assertEqual((result["arms"][0]["median_ms"], result["instrument"]), (1.0, "fixed"))
         self.assertEqual((slow["cell"], slow["built"]["tokens"]), ("t64", 64))
 
-    def test_an_arm_runs_on_every_cell_the_point_sends_its_runner(self):
+    def test_an_arm_runs_on_every_cell_the_point_sends_its_runner_and_pairs_within_a_cell(self):
         result = interleave(point(rola="t8,t16", attention="t64"),
-                            [spec("tip", "fast", runner="rola"), spec("attention", "slow")], rounds=1, reps=1,
-                            reference="attention")
-        self.assertEqual([row["row"] for row in result["arms"]], ["tip|t8", "tip|t16", "attention|t64"])
-        self.assertEqual([row["built"]["tokens"] for row in result["arms"]], [8, 16, 64])
-        self.assertEqual(result["arms"][0]["paired"]["reference"], "attention|t64")
-        with self.assertRaisesRegex(ValueError, "runs on 2 cells"):
-            interleave(point(rola="t8,t16"), [spec("tip", "fast", runner="rola")], reference="tip")
+                            [spec("master", "slow", runner="rola"), spec("tip", "fast", runner="rola"),
+                             spec("attention", "slow")], rounds=1, reps=1, reference="master")
+        rows = {row["row"]: row for row in result["arms"]}
+        self.assertEqual(list(rows), ["master|t8", "master|t16", "tip|t8", "tip|t16", "attention|t64"])
+        self.assertEqual([row["built"]["tokens"] for row in result["arms"]], [8, 16, 8, 16, 64])
+        self.assertEqual([p["reference"] for p in rows["tip|t16"]["paired"]], ["master|t16"])
+        self.assertEqual(rows["tip|t16"]["paired"][0]["ratio_median"], 0.5)
+        self.assertEqual([p["reference"] for p in rows["attention|t64"]["paired"]], ["master|t8", "master|t16"])
+        self.assertEqual(rows["master|t8"]["paired"], [])
+        one = interleave(point(rola="t8,t16"), [spec("tip", "fast", runner="rola")], rounds=1, reps=1,
+                         reference="tip|t8")
+        self.assertEqual([p["reference"] for p in one["arms"][1]["paired"]], ["tip|t8"])
         with self.assertRaisesRegex(ValueError, "sends no cell to runner 'attention'"):
             interleave(point(rola="t8"), [spec("attention", "fast")])
+        with self.assertRaisesRegex(ValueError, "neither a label nor a row"):
+            interleave(point(rola="t8"), [spec("tip", "fast", runner="rola")], reference="nobody")
 
     def test_one_environment_shares_a_worker_and_a_named_worker_is_its_own_process(self):
         shared = interleave(point(a="t8", b="t8"), [spec("a", "fast"), spec("b", "slow")], rounds=1, reps=1)
