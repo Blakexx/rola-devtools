@@ -79,6 +79,12 @@ class ThreeGates(unittest.TestCase):
         slow = classify(ticks, [[1.5, 1.5, 1.5625]] * 2, paired_diffs=[0.5] * MIN_ROUNDS)
         self.assertEqual(slow["verdict"], "regression")
 
+    def test_a_step_between_sessions_is_not_the_stopwatch_resolution(self):
+        """Sessions each of one value, a clean step between them: no session shows a tick, so nothing floors the spread,
+        and the step is judged as the effect it is."""
+        got = classify([[1.0] * 8] * 5, [[1.6] * 8] * 2, paired_diffs=[0.6] * MIN_ROUNDS)
+        self.assertEqual((got["verdict"], got["resolution_ms"], got["floored_at_resolution"]), ("regression", 0.0, False))
+
 
 if __name__ == "__main__":
     unittest.main()

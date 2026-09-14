@@ -42,13 +42,18 @@ def iqr(values: list[float]) -> float:
     return ordered[int(0.75 * len(ordered))] - ordered[int(0.25 * len(ordered))]
 
 
-def resolution(values: list[float]) -> float:
-    """The stopwatch's resolution as the samples themselves show it: the smallest gap between two distinct values (0.0
-    below two). A device-event timer quantizes, so sessions of a small kernel can land on one value every time; their
-    spread is then zero, a threshold at the median, and the next tick over it. Measured on every judgement rather than
-    stored, because it is a property of the stopwatch and the box, and a stored copy could disagree with the samples."""
-    distinct = sorted(set(values))
-    return min((b - a for a, b in zip(distinct, distinct[1:], strict=False)), default=0.0)
+def resolution(sessions: list[list[float]]) -> float:
+    """The stopwatch's resolution as the samples themselves show it: the smallest gap between two distinct values WITHIN
+    one session (0.0 where no session has two). A device-event timer quantizes, so sessions of a small kernel can land on
+    one value every time; their spread is then zero, a threshold at the median, and the next tick over it. Within a
+    session, never across two: a gap between sessions is the effect being judged, not the stopwatch. Measured on every
+    judgement rather than stored, because it is a property of the stopwatch and the box, and a stored copy could disagree
+    with the samples."""
+    gaps = []
+    for samples in sessions:
+        distinct = sorted(set(samples))
+        gaps += [b - a for a, b in zip(distinct, distinct[1:], strict=False)]
+    return min(gaps, default=0.0)
 
 
 def threshold_ms(median_ms: float, iqr_ms: float) -> float:
@@ -143,7 +148,7 @@ def classify(baseline: list[list[float]], runs: list[list[float]], *, paired_dif
                 "reason": f"fewer than {MIN_BASELINE} baseline sessions, or no run to judge"}
     medians = [statistics.median(samples) for samples in baseline]
     base_median, base_iqr = statistics.median(medians), iqr(medians)
-    tick = resolution([value for samples in baseline + runs for value in samples])
+    tick = resolution(baseline + runs)
     limit = threshold_ms(base_median, max(base_iqr, tick))
     run_medians = [statistics.median(samples) for samples in runs]
     got = run_medians[-1]
