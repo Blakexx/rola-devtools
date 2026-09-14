@@ -7,10 +7,10 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Arm:
-    """One thing a library times at a comparison point.
+    """One thing a runner times on one cell.
 
-    `cell` is the library's own JSON description of what it built for the point. `call` runs one timed unit and returns
-    its elapsed milliseconds, measured by the stopwatch `instrument` names, the device synchronized on both sides.
+    `cell` is the runner's own JSON description of what it built from the cell's data. `call` runs one timed unit and
+    returns its elapsed milliseconds, measured by the stopwatch `instrument` names, the device synchronized on both sides.
     """
 
     cell: dict
