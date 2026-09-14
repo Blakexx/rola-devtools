@@ -16,7 +16,7 @@ repos:
       - id: tests
         name: tests (python -m unittest)
         language: system
-        entry: python3 -m unittest discover -s tests -t .
+        entry: python3 -m unittest discover -s tests
         pass_filenames: false
         always_run: true
       - id: mirror-declarations
