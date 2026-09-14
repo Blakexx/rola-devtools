@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rola-devtools"
+version = "0.1.0"
+description = "The development tools every RoLA repository shares: the public mirror's export and the interleaving driver"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Blake Bottum" }]
+# No dependencies: the standard library only, so every repository's venv, CI job and container can carry it.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["rola_devtools*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "UP", "B", "SIM", "I", "C4"]
