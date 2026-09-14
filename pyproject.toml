@@ -16,7 +16,7 @@ dependencies = []
 include = ["rola_devtools*"]
 
 [tool.ruff]
-line-length = 120
+line-length = 127
 target-version = "py310"
 
 [tool.ruff.lint]

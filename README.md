@@ -7,6 +7,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 |---|---|
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
 | `rola_devtools.interleave` | the interleaving driver: every library's arms at one comparison point, timed one call at a time |
+| `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
 
 ## The public mirror
 
@@ -63,6 +64,17 @@ result = interleave(
      ArmSpec("attention", "bench.arms:attention", "flash")],
     matching="capacity at N = L", reference="attention", hold=gpu_and_clock_lock)
 ```
+
+## The verdict
+
+`rola_devtools.verdict.classify(baseline, runs, paired_diffs=...)` calls a candidate's latest run a regression only when
+three gates fire: its median is above the baseline's own median plus three sigmas of the baseline's spread (sigma from
+the interquartile range, never a flat percentage); an exact Wilcoxon signed-rank test over that session's per-round
+differences (candidate minus baseline, alpha 0.01, at least 8 rounds, the floor the alpha itself sets) says it is slower;
+and the violation persists, a trailing run of at least two over the baseline's sessions followed by the candidate's runs.
+Anything less is reported as what it is: `flagged_not_confirmed`, `suspicious`, `insufficient_data` or `no_regression`.
+It takes plain samples; which stored sessions are the baseline is a query over the store (`python -m rola_results
+verdict`).
 
 ## Tests and the gate
 
