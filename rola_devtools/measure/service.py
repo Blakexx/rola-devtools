@@ -17,8 +17,13 @@ every instance's arms named in `arms` on every cell in `cells` each accepts, in 
 order. Its semantics are its members' and its timing; its reference instance and its relation (a group's claim, the
 instances' roles) are recorded with it and never keyed.
 
-A node's semantics are its kind, its unit and parameters, the identity its owner computed, and the cell's record; the
-ids -- `label:name@cell`, `memory label:name@cell`, `session name` -- are for reading a log and nothing parses them.
+A node's semantics are its kind, its unit and parameters, the identity its owner computed, the cell's record and the
+digest of the central registry's code that draws it (`draw`); the ids -- `label:name@cell`, `memory label:name@cell`,
+`session name` -- are for reading a log and nothing parses them.
+
+BUILDS FIRST. A unit's acceptance and identity may read what its instance builds (a binary's arm tables, its digest), so
+`build(store)` runs every instance's builds before `nodes` describes the units on cells; a build that fails or refuses
+leaves its instance undescribable, and `nodes` refuses it by name.
 
 EXECUTION, under `hold` (the GPU lock, exclusive, and the host's clock lock proven by an instance's `ClockReader` after
 each hold): an instrument's setup and execute; an arm's memory measurement; a session's setups, then a barrier, then
@@ -152,6 +157,12 @@ class Service:
             registry = central()
         self.instances, self.registry, self.provenance, self.log = list(instances), registry, provenance, log
         self.hold = hold or self._locks
+        from ..build import identity
+        from ..cells import FILES
+
+        root = FILES[0].parent
+        #: the central registry's code and records as this service reads them: a change to a draw moves every record
+        self.draw = identity.files(root, sorted(p.name for p in root.iterdir() if p.suffix in (".py", ".json")))
         self._workers: dict[str, _Worker] = {}
         self._units: dict[str, dict[str, dict]] = {}
         self._clock: list = []
@@ -244,7 +255,7 @@ class Service:
 
     def _semantics(self, unit: dict, cell: str) -> dict:
         return {"unit": unit["unit"], "params": unit["params"], "identity": unit["on"][cell]["identity"],
-                "cell": self._record(cell)}
+                "cell": self._record(cell), "draw": self.draw if cell else None}
 
     def _unit_node(self, instance: Instance, unit: dict, cell: str) -> Node:
         """An instrument's or a build's node; for an arm, its memory node (its timed samples are its sessions')."""
@@ -285,6 +296,20 @@ class Service:
                 out.add(cur)
                 todo += [dep for _role, dep in nodes[cur].deps]
         return [i for i in nodes if i in out]
+
+    def build(self, store: Callable[[str], object], *, dry: bool = False) -> list[Outcome]:
+        """Every instance's builds (and what they read), run unless stored and present: what `nodes` needs before it can
+        describe an instance's units on cells."""
+        nodes: dict[str, Node] = {}
+        needed: set[str] = set()
+        for instance in self.instances:
+            for unit in self.units(instance, []).values():
+                if not unit["per_cell"] and unit["kind"] in ("build", "instrument"):
+                    node = self._unit_node(instance, unit, "")
+                    nodes[node.id] = node
+                    if unit["kind"] == "build":
+                        needed.add(node.id)
+        return self.run([nodes[i] for i in self._closure(nodes, needed)], store, dry=dry)
 
     # ------------------------------------------------------------------ execution
 

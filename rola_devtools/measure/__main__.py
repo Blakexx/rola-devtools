@@ -53,11 +53,19 @@ def main() -> int:
         sessions.append(Session(spec, SESSION_LOCATION, tuple(arms.split("+")), tuple(names.split(","))))
     instance = Instance("local", sys.executable, os.getcwd(), a.registry)
     root = a.store_root or ROOT
+
+    def store(location):
+        return Store(location, root)
+
     with Service([instance], provenance=lambda inst: checkout(inst.cwd), log=lambda line: print(line, flush=True)) as service:
+        built = service.build(store, dry=a.cmd == "plan")
+        unbuilt = [o for o in built if o.status not in ("complete", "ran")]
+        if unbuilt:
+            print(f"measure: the builds are {outcomes_line(built)}; the units on cells are described once they are built")
+            return 0 if all(o.status == "pending" for o in unbuilt) else 1
         nodes = service.nodes(cells, sessions=sessions, memory=not a.no_memory,
                               select=lambda inst, unit: units is None or unit["name"] in units)
-        outcomes = service.run(nodes, lambda location: Store(location, root), repeat=a.repeat, force=a.force,
-                               dry=a.cmd == "plan")
+        outcomes = service.run(nodes, store, repeat=a.repeat, force=a.force, dry=a.cmd == "plan")
     print(f"measure: {outcomes_line(outcomes)}")
     return 1 if any(o.status in ("failed", "blocked") for o in outcomes) else 0
 

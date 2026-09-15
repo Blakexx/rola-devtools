@@ -146,6 +146,14 @@ class Measure(unittest.TestCase):
         out = self.go(self.service(), select=lambda i, u: False, sessions=[session])
         self.assertEqual(out["session unfit"].status, "refused")
 
+    def test_builds_run_before_the_units_are_described_on_cells(self):
+        service = self.service()
+        built = {o.id: o.status for o in service.build(self.store)}
+        self.assertEqual(built, {"fake:build": "ran"})
+        self.assertEqual(self.ledger(), ["build"])
+        out = self.go(service, select=lambda i, u: u["name"] == "a")
+        self.assertEqual((out["fake:build"].status, out["fake:a@t8"].status), ("complete", "ran"))
+
     def test_one_worker_serves_an_instance_for_the_whole_run(self):
         service = self.service()
         self.go(service, select=lambda i, u: u["name"] in ("a", "no"))
