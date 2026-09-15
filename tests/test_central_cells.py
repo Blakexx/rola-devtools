@@ -77,8 +77,8 @@ CASES = {
     ("support", "full"): (_view(DENSE, OTHER), _view(SPARSE, OTHER)),
 }
 
-RECORD = {"widths": [16, 16], "dv": 64, "tokens": 16, "draw": "dense", "k_tok": None, "cohort": None, "support": 1.0,
-          "backing": "dense", "state": "fresh", "tier": "oracle", "regime": None}
+RECORD = {"seed": 0, "widths": [16, 16], "dv": 64, "tokens": 16, "draw": "dense", "k_tok": None, "cohort": None,
+          "support": 1.0, "backing": "dense", "state": "fresh", "tier": "oracle", "regime": None}
 
 
 class RegimeChecks(unittest.TestCase):
@@ -125,7 +125,7 @@ class Records(unittest.TestCase):
     def test_every_file_loads_into_one_registry_and_each_kind_builds_its_record(self):
         kinds = {type(build(record)) for record in central().cells.values()}
         self.assertEqual(kinds, {carry.CarryCell, layer.LayerCell, qkv.QKVCell})
-        self.assertEqual([path.name for path in FILES], ["carry.json", "layer.json", "qkv.json"])
+        self.assertEqual([path.name for path in FILES], ["bases.json", "carry.json", "layer.json", "qkv.json"])
 
     def test_the_corners_stay_and_the_registry_covers_the_whole_box(self):
         cells = [c for c in map(build, central().cells.values()) if isinstance(c, carry.CarryCell)]

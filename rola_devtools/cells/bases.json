@@ -1,0 +1,5 @@
+{
+ "schema": 1,
+ "note": "THE BASE REGISTRY: fragments cells derive from (rola_devtools.cells). Empty until a family of cells shares one.",
+ "bases": []
+}

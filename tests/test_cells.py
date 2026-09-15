@@ -72,6 +72,55 @@ class Registries(unittest.TestCase):
         self.assertTrue(Registry.load([cells]).adhoc({"rola": ["t8"]})["name"].startswith("adhoc:"))
 
 
+class Derived(unittest.TestCase):
+    BASES = {"schema": 1, "bases": [{"name": "small", "data": "fake_provider:tokens", "tokens": 8, "scale": 1.0},
+                                    {"name": "wide", "scale": 4.0}]}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def load(self, *cells_docs):
+        paths = [write(self.dir, "bases.json", self.BASES)]
+        paths += [write(self.dir, f"cells{i}.json", doc) for i, doc in enumerate(cells_docs)]
+        return Registry.load(paths)
+
+    def test_a_derived_cell_merges_its_bases_in_order_and_its_own_fields_last(self):
+        registry = self.load({"schema": 1, "cells": [{"name": "d", "from": ["small", "wide"], "tokens": 16},
+                                                     {"name": "direct", "data": "fake_provider:tokens", "tokens": 2}]})
+        self.assertEqual(registry.cell("d"), {"name": "d", "data": "fake_provider:tokens",
+                                              "params": {"tokens": 16, "scale": 4.0}})
+        self.assertEqual((registry.derived["d"], "direct" in registry.derived), (("small", "wide"), False))
+        self.assertNotIn("small", registry.cells)
+
+    def test_vary_makes_one_named_cell_per_combination(self):
+        registry = self.load({"schema": 1, "cells": [{"name": "s{seed}-t{tokens}", "from": ["small"],
+                                                     "vary": {"seed": [1, 2], "tokens": [8, 16]}}]})
+        self.assertEqual(sorted(registry.cells), ["s1-t16", "s1-t8", "s2-t16", "s2-t8"])
+        self.assertEqual(registry.cell("s2-t16")["params"], {"tokens": 16, "scale": 1.0, "seed": 2})
+
+    def test_what_a_derivation_cannot_mean_is_refused(self):
+        with self.assertRaisesRegex(KeyError, "base registry does not hold"):
+            self.load({"schema": 1, "cells": [{"name": "d", "from": ["absent"]}]})
+        with self.assertRaisesRegex(ValueError, "from is a list"):
+            self.load({"schema": 1, "cells": [{"name": "d", "from": "small"}]})
+        with self.assertRaisesRegex(ValueError, "names each"):
+            self.load({"schema": 1, "cells": [{"name": "d", "from": ["small"], "vary": {"seed": [1, 2]}}]})
+        with self.assertRaisesRegex(ValueError, "never derived"):
+            Registry.load([write(self.dir, "b.json", {"schema": 1, "bases": [{"name": "x", "from": ["y"]}]})])
+
+    def test_code_derives_a_cell_into_a_registry(self):
+        registry = self.load({"schema": 1, "cells": []})
+        record = registry.derive("generated", ["small"], seed=9)
+        self.assertEqual((record["params"], registry.derived["generated"]), ({"tokens": 8, "scale": 1.0, "seed": 9},
+                                                                            ("small",)))
+        with self.assertRaises(ValueError):
+            registry.derive("generated", ["small"])
+
+
 if __name__ == "__main__":
     os.chdir(HERE)
     unittest.main()

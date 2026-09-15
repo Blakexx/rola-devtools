@@ -20,7 +20,6 @@ Standard library until a draw is realized: `realize` imports torch where it is c
 from __future__ import annotations
 
 import dataclasses
-import zlib
 from dataclasses import dataclass
 
 DRAWS = ("dense", "alt", "both", "cohort", "dead", "deposit",
@@ -44,10 +43,11 @@ DEPOSIT_TOKEN = 5
 
 @dataclass(frozen=True, slots=True)
 class CarryCell:
-    """One record, validated. ``seed`` is derived from ``name`` and never stored: `hash(str)` is salted per process, so a
-    seed from it would be a different draw on every run and a failure could not be reproduced from its own name."""
+    """One record, validated. ``seed`` is the draw's random seed, stated by the record, so a failure reproduces from the
+    cell alone and a derived cell can change it."""
 
     name: str
+    seed: int
     widths: tuple[int, ...]
     dv: int
     tokens: int
@@ -60,10 +60,6 @@ class CarryCell:
     tier: str
     #: ``((axis, value), ...)`` on every axis of `REGIME_AXES`; None for a degenerate draw
     regime: tuple[tuple[str, str], ...] | None
-
-    @property
-    def seed(self) -> int:
-        return zlib.crc32(self.name.encode()) & 0xFFFF
 
     @property
     def D(self) -> int:
@@ -93,7 +89,7 @@ def carry_cell(name: str, **params) -> CarryCell:
     from .regimes import REGIME_AXES
 
     regime = params["regime"]
-    cell = CarryCell(name=name, widths=tuple(params["widths"]), dv=params["dv"], tokens=params["tokens"],
+    cell = CarryCell(name=name, seed=params["seed"], widths=tuple(params["widths"]), dv=params["dv"], tokens=params["tokens"],
                      draw=params["draw"], k_tok=params["k_tok"], cohort=params["cohort"], support=params["support"],
                      backing=params["backing"], state=params["state"], tier=params["tier"],
                      regime=None if regime is None else tuple((axis, regime[axis]) for axis in REGIME_AXES
