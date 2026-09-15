@@ -1,29 +1,42 @@
-"""CELLS AND POINTS: what a comparison runs, each named once and referenced by name.
+"""THE CELL REGISTRY: every input a RoLA measurement or test runs on, named once, for every package.
 
-A CELL is a data provider and its constructor parameters. `data` names a `module:function` that, called with the cell's
-name and its parameters, returns the data an arm runs on: a description of operands, a fixture, the inputs of a layer.
-It builds nothing heavy itself (an arm builds its tensors from the data, in its own worker) and derives any seed from the
-name, so a cell reproduces from its name alone. A registry file of cells names `data` once for its records, a record may
-name its own, and every other field of a record except `name` is a parameter.
+A CELL is a data provider and its parameters. `data` names a `module:function` that, called with the cell's name and its
+parameters, returns the cell's typed record; the record's own module realizes it into tensors in the worker that runs it,
+and derives any seed from the cell, so a cell reproduces from its name alone. A registry file of cells names `data` once
+for its records, a record may name its own, and every other field of a record except `name` is a parameter.
 
-A POINT is a named group of cells by RUNNER -- rola, attention, a fla layer -- and what the group holds equal: `holds`,
-the claim in words, recorded with every result, and `equal`, the parameters every cell of the point must carry with one
-value, checked when the registry loads. A runner receives the data of each cell the point sends it and builds arms from
-it or refuses; nothing but the point matches a cell to a runner.
+THE CENTRAL REGISTRY (`central()`, Blake 2026-09-15: "keeps one consistent source, and if a package doesnt work with one
+of the central changes, then you just update that package") is this package's own files, one per kind of input:
 
-    {"schema": 1, "data": "benchmarks.cells:carry_cell", "cells": [{"name": "flat-small-alt-k16", "tokens": 256, ...}]}
+- `carry.json` (`rola_devtools.cells.carry`): a routed recurrence's input -- routing amplitudes, gain, values, and the
+  state the sequence enters with, including its backing -- with the draws and the regime each cell proves;
+- `layer.json` (`rola_devtools.cells.layer`): a sequence layer's hidden states and values;
+- `qkv.json` (`rola_devtools.cells.qkv`): attention's queries, keys and values.
+
+A cell holds its input and never how a package runs it: a kernel's launch shape, RoLA's routing widths or gain, an
+attention backend are an arm's parameters. A name is unique across every file loaded, so within one run a name is one
+input for every package that reads it.
+
+A POINT is a named group of cells by RUNNER and what the group holds equal: `holds`, the claim in words, recorded with
+every result, and `equal`, the parameters every cell of the point must carry with one value, checked when the registry
+loads.
+
+    {"schema": 1, "data": "rola_devtools.cells.carry:carry_cell", "cells": [{"name": "flat-small-alt-k16", ...}]}
     {"schema": 1, "points": [{"name": "L256-N256-dv64", "holds": "...", "equal": ["tokens", "dv"],
-                              "runners": {"rola": ["flat-small-alt-k16"], "attention": ["attn-L256-dv64"]}}]}
+                              "runners": {"rola": ["flat-small-alt-k16"], "attention": ["qkv-L256-dv64"]}}]}
 
-Standard library only: a registry loads and checks without torch; `build` imports the data provider where it is called.
+Standard library only: a registry loads and checks without torch; realizing a cell imports torch where it is called.
 """
 from __future__ import annotations
 
 import importlib
 import json
+from functools import cache
 from pathlib import Path
 
 SCHEMA = 1
+#: the central registry's files, one per kind of input
+FILES = tuple(Path(__file__).with_name(name) for name in ("carry.json", "layer.json", "qkv.json"))
 
 
 class Registry:
@@ -100,3 +113,14 @@ def build(record: dict):
     """The data of a cell: its provider called with its name and parameters."""
     module, _, function = record["data"].partition(":")
     return getattr(importlib.import_module(module), function)(record["name"], **record["params"])
+
+
+@cache
+def central() -> Registry:
+    """The central registry: every cell of `FILES`, read once a process."""
+    return Registry.load(FILES)
+
+
+def cell(name: str):
+    """A central cell's typed record (`CarryCell`, `LayerCell`, `QKVCell`) by name."""
+    return build(central().cell(name))

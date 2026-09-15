@@ -1,0 +1,31 @@
+{
+ "schema": 1,
+ "data": "rola_devtools.cells.layer:layer_cell",
+ "note": "THE LAYER CELLS: a sequence layer's input as data -- hidden states and values drawn from a seed. How a layer is built from them (RoLA's routing widths, alpha and logit gain; an attention layer's heads) is the arm's.",
+ "fields": {
+  "name": "the cell's identity: its input, spelled out; documents and records cite it, so a name is never reused or renamed",
+  "B": "batch",
+  "tokens": "T, the prefill length in tokens",
+  "H": "heads",
+  "hidden": "the hidden width the layer's projections read; 0 means H * dv",
+  "dv": "the value width",
+  "dtype": "bf16 | fp32, the input dtype (and the dtype an arm builds its layer in)",
+  "seed": "an arm's parameters from manual_seed(seed); the inputs from a device generator at seed + 500",
+  "decode_steps": "single-token steps taken after the prefill; 0 is a prefill-only cell",
+  "note": "what this input is FOR; a layer cell before 2026-09-15 also named a RoLA construction, which the note keeps and rola's layer arms now carry"
+ },
+ "cells": [
+  {"name": "layer-B2-T2048-H8-h512-dv64-bf16-s0", "B": 2, "tokens": 2048, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 0, "decode_steps": 0, "note": "the input of chunk-p73-pinned (RoLA widths [64, 64], alpha 1.5, logit gain 1.0). THE pinned cell: the inventory constructor every published step number was taken on, unchanged"},
+  {"name": "layer-B2-T512-H8-h512-dv64-bf16-s1", "B": 2, "tokens": 512, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 1, "decode_steps": 0, "note": "the input of chunk-sparse-gain8 (RoLA widths [64, 64], alpha 1.5, logit gain 8.0). the pinned constructor at routing gain 8: 4.6% per-token write support, and a SEQUENCE union that is still fully live"},
+  {"name": "layer-B2-T64-H8-h512-dv64-bf16-s5", "B": 2, "tokens": 64, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 5, "decode_steps": 0, "note": "the input of chunk-deadblocks-T64 (RoLA widths [64, 64], alpha 1.5, logit gain 16.0). ~52% live atoms: the arm with dead blocks for the plan to skip"},
+  {"name": "layer-B2-T512-H8-h512-dv64-bf16-s2", "B": 2, "tokens": 512, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 2, "decode_steps": 0, "note": "the input of chunk-dense-D2 (RoLA widths [64, 64], alpha None, logit gain 1.0). softmax routing: the dense end of the distribution space"},
+  {"name": "layer-B2-T4096-H8-h512-dv64-bf16-s6", "B": 2, "tokens": 4096, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 6, "decode_steps": 0, "note": "the input of chunk-dense-NL4096 (RoLA widths [64, 64], alpha None, logit gain 1.0). dense routing at T = N = 4096: the local N=L anchor for the worst-case O(L*N) parity regime"},
+  {"name": "layer-B2-T2048-H8-h512-dv64-bf16-s7", "B": 2, "tokens": 2048, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 7, "decode_steps": 0, "note": "the input of chunk-bwd-smalln (RoLA widths [16, 16], alpha 1.5, logit gain 1.0). the reverse pass' second point: N=256 at T=2048, the profile's small-N cell"},
+  {"name": "layer-B2-T2048-H8-h512-dv64-bf16-s8", "B": 2, "tokens": 2048, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 8, "decode_steps": 0, "note": "the input of chunk-bwd-dense-N64 (RoLA widths [8, 8], alpha None, logit gain 1.0). N = BC = 64, dense: the one-block lattice, the scans' bodies with no fan-in term"},
+  {"name": "layer-B1-T512-H2-h512-dv64-bf16-s9", "B": 1, "tokens": 512, "H": 2, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 9, "decode_steps": 0, "note": "the input of chunk-bwd-splitk (RoLA widths [256, 256], alpha 1.5, logit gain 1.0). N = 65536 at BC = 128: a 512-block lattice, the split-K fan-in's own depth"},
+  {"name": "layer-B2-T512-H8-h512-dv64-bf16-s3", "B": 2, "tokens": 512, "H": 8, "hidden": 512, "dv": 64, "dtype": "bf16", "seed": 3, "decode_steps": 0, "note": "the input of chunk-deep-D4-w8 (RoLA widths [8, 8, 8, 8], alpha 1.5, logit gain 8.0). D=4 at N=4096: the level axis at fixed leaf count"},
+  {"name": "layer-B2-T128-H2-h128-dv64-fp32-s4-dec8", "B": 2, "tokens": 128, "H": 2, "hidden": 128, "dv": 64, "dtype": "fp32", "seed": 4, "decode_steps": 8, "note": "the input of chunk-decode-w16 (RoLA widths [16, 16], alpha 1.5, logit gain 1.0). prefill + 8 carried single-token steps: the decode and continuation cell"},
+  {"name": "layer-B2-T128-H2-h128-dv64-fp32-s10-dec8", "B": 2, "tokens": 128, "H": 2, "hidden": 128, "dv": 64, "dtype": "fp32", "seed": 10, "decode_steps": 8, "note": "the input of chunk-decode-la-w256 (RoLA widths [256], alpha None, logit gain 1.0). D=1 flat dense at N=256: the internal LA-control for the routed decode cell"},
+  {"name": "layer-B1-T128-H4-h64-dv64-fp32-s201", "B": 1, "tokens": 128, "H": 4, "hidden": 64, "dv": 64, "dtype": "fp32", "seed": 201, "decode_steps": 0, "note": "the input of producer-sweep-g0.25 (RoLA widths [64, 64], alpha 1.5, logit gain 0.25); of producer-sweep-g1 (RoLA widths [64, 64], alpha 1.5, logit gain 1.0); of producer-sweep-g4 (RoLA widths [64, 64], alpha 1.5, logit gain 4.0); of producer-sweep-g16 (RoLA widths [64, 64], alpha 1.5, logit gain 16.0). the producer's density sweep: one entmax constructor at four logit gains, whose realized write density must fall monotonically across at least a factor of four (tests/integration/test_producer_sweep.py)"}
+ ]
+}

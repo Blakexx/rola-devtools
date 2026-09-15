@@ -15,6 +15,10 @@ dependencies = []
 [tool.setuptools.packages.find]
 include = ["rola_devtools*"]
 
+[tool.setuptools.package-data]
+# the central cell registry's records
+"rola_devtools.cells" = ["*.json"]
+
 [tool.ruff]
 line-length = 127
 target-version = "py310"

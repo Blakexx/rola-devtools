@@ -6,7 +6,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | Module | What it is |
 |---|---|
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
-| `rola_devtools.cells` | cells (a data provider and its parameters) and points (cells grouped by runner, and what they hold equal), named once |
+| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw and the regime it proves, named once; and points (cells grouped by runner, and what they hold equal) |
 | `rola_devtools.interleave` | the interleaving driver: every runner's arms on the cells of one point, timed one call at a time |
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
 | `rola_devtools.graph` | the build system for measurements: owners declare units (setup, execute, post) and graphs, a composer runs what is not yet stored, timed units interleaved in sessions |
@@ -80,6 +80,25 @@ and the violation persists, a trailing run of at least two over the baseline's s
 Anything less is reported as what it is: `flagged_not_confirmed`, `suspicious`, `insufficient_data` or `no_regression`.
 It takes plain samples; which stored sessions are the baseline is a query over the store (`python -m rola_results
 verdict`).
+
+## The central cell registry
+
+A cell is an input, named once for every package: `rola_devtools/cells/carry.json` (a routed recurrence's routing
+amplitudes, gain, values and the state it enters with, including the state's backing), `layer.json` (a layer's hidden
+states and values) and `qkv.json` (attention's queries, keys and values). A record holds the input and never how a
+package runs it -- a kernel's launch shape, RoLA's routing widths or gain, an attention backend are an arm's -- so two
+arms on one cell read the same tensors, and when the registry changes, a package that no longer fits it is what changes.
+
+```python
+from rola_devtools.cells import cell, carry
+
+drawn = carry.realize(cell("flagship-alt-k4"))   # bf16 read/write levels, gain, v; the entry state of a carried cell
+```
+
+Every carry cell but the two degenerate ones declares where in the routing distribution it sits on six axes (density,
+coherence, read/write correlation, mass, tail, support; `rola_devtools.cells.regimes`), and `realize` proves the draw is
+there before returning it. A cell's seed comes from its name, so a failure reproduces from the name alone. Loading and
+checking the registry needs only the standard library; realizing a cell needs torch.
 
 ## The dev config and the machine's locks
 

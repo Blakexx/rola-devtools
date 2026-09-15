@@ -154,8 +154,11 @@ class GpuLock(Configured):
         self.release(exclusive)
 
     def test_a_holder_lowers_its_childrens_priority_unless_nice_is_off(self):
+        """By 10 from where the holder started (capped at 19): a process that already held a lock is niced already."""
         path = str(self.tmp / "gpu.lock")
-        for nice, expected in ((True, 10), (False, 0)):
+        base = os.nice(0)
+        self.assertLess(base, 19, "this process already runs at the lowest priority: a lowered child is unobservable")
+        for nice, expected in ((True, min(base + 10, 19)), (False, base)):
             out = subprocess.run([sys.executable, "-c", NICE_UNDER_GPU_LOCK, path], env=self.env(host={"nice": nice}),
                                  capture_output=True, text=True, check=True, timeout=30)
             self.assertEqual(int(out.stdout.strip().splitlines()[-1]), expected, out.stderr)

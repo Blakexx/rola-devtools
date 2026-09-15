@@ -1,0 +1,19 @@
+{
+ "schema": 1,
+ "data": "rola_devtools.cells.qkv:qkv_cell",
+ "note": "THE QKV CELLS: attention's input as data -- queries, keys and values of `heads` heads of width `dv` over `tokens` tokens, `batch` sequences, in `dtype`, causal or not; drawn from one device generator at seed 0 (rola_devtools.cells.qkv.realize).",
+ "cells": [
+  {"name": "qkv-L16-dv64", "tokens": 16, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L32-dv64", "tokens": 32, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L64-dv64", "tokens": 64, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L128-dv64", "tokens": 128, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L256-dv64", "tokens": 256, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L1024-dv32", "tokens": 1024, "dv": 32, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L1024-dv64", "tokens": 1024, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L1024-dv128", "tokens": 1024, "dv": 128, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L1792-dv64", "tokens": 1792, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L4096-dv64", "tokens": 4096, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L16384-dv64", "tokens": 16384, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L65536-dv64", "tokens": 65536, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true}
+ ]
+}
