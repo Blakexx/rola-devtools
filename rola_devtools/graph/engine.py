@@ -61,9 +61,10 @@ class Instance:
 
 @dataclass(frozen=True)
 class Session:
-    """Timed members interleaved together. `members` are qualified node names (`label:name`); `reference` is the member
-    the paired ratios divide by (the first by default); `relation` is what the session holds (roles, what is equal) and is
-    recorded with it, never keyed."""
+    """Timed members interleaved together. `members` are qualified node names (`label:name`). `reference` is the instance
+    label the paired ratios divide by (the first member's by default): each member pairs with that instance's node of the
+    same name, when the session holds one. `relation` is what the session holds (roles, what is equal). The reference and
+    the relation are recorded with the session and never keyed: pairing is a reading of the samples."""
 
     name: str
     location: str
@@ -309,8 +310,7 @@ def _session(session: Session, nodes, store, hold, repeat, force, dry, provenanc
     members = [nodes[q] for q in session.members]
     semantics = {"members": [_semantics(n, {}) for _i, n in members],
                  "timing": {"rounds": session.rounds, "reps": session.reps, "warmup": session.warmup,
-                            "seed": session.seed, "reference": session.members.index(session.reference)
-                            if session.reference else 0}}
+                            "seed": session.seed}}
     k, st = key(semantics), store(session.location)
     record = st.get(k)
     if _complete(record) and not force and not repeat:
@@ -389,9 +389,7 @@ def _interleave(session: Session, nodes, root: Path, hold) -> dict:
     def blocks(values: list[float]) -> list[float]:
         return [statistics.median(values[i:i + session.reps]) for i in range(0, len(values), session.reps)]
 
-    reference = session.reference or (live[0] if live else None)
-    if reference is not None and reference not in samples:
-        reference = live[0] if live else None
+    reference = session.reference or (session.members[0].split(":", 1)[0] if session.members else None)
     rows = []
     for q in live:
         inst, node = nodes[q]
@@ -400,11 +398,12 @@ def _interleave(session: Session, nodes, root: Path, hold) -> dict:
                "location": node["location"], "built": ready[q]["built"], "ms": samples[q],
                "blocks_ms": blocks(samples[q]), "median_ms": statistics.median(blocks(samples[q])),
                "iqr_ms": iqr(blocks(samples[q])), "post": _post(inst.env, node, ws[q]), "paired": []}
-        if reference is not None and q != reference:
-            ratios = [a / r for a, r in zip(samples[q], samples[reference], strict=True)]
-            row["paired"].append({"reference": reference, "ratios": ratios, "ratio_median": statistics.median(ratios),
+        partner = f"{reference}:{node['name']}"
+        if partner != q and partner in samples:
+            ratios = [a / r for a, r in zip(samples[q], samples[partner], strict=True)]
+            row["paired"].append({"reference": partner, "ratios": ratios, "ratio_median": statistics.median(ratios),
                                   "ratio_iqr": iqr(ratios),
-                                  "round_diffs_ms": [a - r for a, r in zip(blocks(samples[q]), blocks(samples[reference]),
+                                  "round_diffs_ms": [a - r for a, r in zip(blocks(samples[q]), blocks(samples[partner]),
                                                                           strict=True)]})
         rows.append(row)
     return {"session": session.name, "instrument": instruments.pop() if live else None, "reference": reference,

@@ -129,9 +129,20 @@ class Graph(unittest.TestCase):
         self.assertEqual(doc["refused"], {"fake:unbuilt": "this arm is not built"})
         self.assertEqual(len(doc["order"]), 2 * 2 * 3)
         slow = doc["members"][1]
-        self.assertEqual((slow["median_ms"], slow["paired"][0]["ratio_median"], slow["post"]), (3.0, 3.0, {"samples": 6}))
+        self.assertEqual((slow["median_ms"], slow["paired"], slow["post"]), (3.0, [], {"samples": 6}))
         self.assertEqual(doc["relation"], {"holds": "one fake cell"})
         self.assertEqual(self.go(sessions=[session], select={"fake:fast"})["fast-vs-slow"].status, "complete")
+
+    def test_a_member_pairs_with_the_reference_instances_node_of_its_own_name(self):
+        other = load(Env("other", self.env.python, self.env.cwd, self.env.graph, self.env.env))
+        session = Session("two-checkouts", "fake/sessions", ("fake:fast", "other:fast", "other:slow"), reference="fake",
+                          rounds=2, reps=3)
+        out = {o.name: o for o in run([self.instance, other], self.store, [session], select={"fake:fast"},
+                                      log=lambda _line: None)}
+        st = self.store("fake/sessions")
+        members = {m["member"]: m for m in json.loads(st.output(st.get(out["two-checkouts"].key)).read_text())["members"]}
+        self.assertEqual([p["reference"] for p in members["other:fast"]["paired"]], ["fake:fast"])
+        self.assertEqual((members["fake:fast"]["paired"], members["other:slow"]["paired"]), ([], []))
 
     def test_a_session_every_member_refuses_is_refused(self):
         session = Session("nothing-built", "fake/sessions", ("fake:unbuilt",), rounds=1, reps=1)
