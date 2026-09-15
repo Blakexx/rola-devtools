@@ -165,6 +165,8 @@ def null_gate(ctx) -> dict:
                   if ms[(b["id"], r, k)] > 0]
         q1, median, q3 = _quartiles(ratios)
         cells[e["cell"]] = {"trusted": q1 <= 1.0 <= q3, "ratio_median": median, "ratio_q1": q1, "ratio_q3": q3}
+    #: the gate's finding travels with its samples: a store target keeps the file
+    (ctx.workspace / "session.json").write_text(json.dumps({**session, "null": cells}, sort_keys=True))
     return {"members": [{k: m.get(k) for k in ("id", "owner", "cell", "status", "error")} for m in session["members"]],
             "samples": len(session["samples"]), "cells": cells, "file": "session.json",
             "local": {"envs": {e["owner"]: e["env"] for e in entries}}}

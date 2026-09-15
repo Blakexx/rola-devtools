@@ -151,6 +151,7 @@ class Timing(unittest.TestCase):
         self.assertEqual((biased["trusted"], biased["ratio_median"]), (False, 0.5))
         doc = json.loads((Path(out["null/biased"].dir) / "session.json").read_text())
         self.assertEqual(len({m["built"]["pid"] for m in doc["members"]}), 2)
+        self.assertEqual(doc["null"]["t8"], biased)
 
     def test_a_stored_session_appends_a_run_stamped_sample_to_its_configurations_record(self):
         from rola_devtools.store import store
