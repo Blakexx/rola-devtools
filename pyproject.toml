@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "rola-devtools"
 version = "0.1.0"
-description = "The development tools every RoLA repository shares: the public mirror's export and the interleaving driver"
+description = "The development tools every RoLA repository shares: the public mirror's export, the cell registry, the interleaving driver and the measurement build system"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "Blake Bottum" }]

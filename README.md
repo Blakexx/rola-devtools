@@ -9,6 +9,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.cells` | cells (a data provider and its parameters) and points (cells grouped by runner, and what they hold equal), named once |
 | `rola_devtools.interleave` | the interleaving driver: every runner's arms on the cells of one point, timed one call at a time |
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
+| `rola_devtools.graph` | the build system for measurements: owners declare units (setup, execute, post) and graphs, a composer runs what is not yet stored, timed units interleaved in sessions |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 
 ## The public mirror
