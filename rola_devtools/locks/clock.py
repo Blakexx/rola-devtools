@@ -49,6 +49,22 @@ def within(ghz: float | None, cfg: dict | None) -> bool:
     return cfg is None or (ghz is not None and abs(ghz - cfg["ghz"]) <= TOLERANCE * cfg["ghz"])
 
 
+#: the lock this process engaged, released at its exit
+_ENGAGED: list = []
+
+
+def lock() -> dict | None:
+    """Engage the host's clock lock once for this process and release it when the process exits, without proving it:
+    the proof reads the device, which the caller does against `within`. None on a host that runs unlocked."""
+    cfg = load()
+    if cfg is None or _ENGAGED:
+        return cfg
+    _run(cfg["lock"])
+    _ENGAGED.append(cfg)
+    atexit.register(_run, cfg["unlock"])
+    return cfg
+
+
 def engage(read_ghz) -> dict | None:
     """lock, prove it with the device read, and arrange the unlock for every exit."""
     cfg = load()

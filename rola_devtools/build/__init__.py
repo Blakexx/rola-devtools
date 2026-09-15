@@ -1,4 +1,12 @@
-"""THE BUILD SYSTEM: nodes keyed by their content; what is stored is skipped, the rest runs in dependency order.
+"""THE BUILD SYSTEM.
+
+THE DECLARED BUILD SYSTEM is `declare` (targets declared by composable functions in files), `scheduler` (keys, the
+cache, requirements, dependency order, build and domain failures), `runtime` and `worker` (one worker per environment),
+`resources` (requirements as counting semaphores over the machine's locks), `cache` and `context` (what an executor is
+given); `python -m rola_devtools.build plan|run FILE:TARGET` runs one. What follows in this module is the node runner
+the measurement service (`rola_devtools.measure`) is built on, until the declared targets replace it.
+
+NODES keyed by their content; what is stored is skipped, the rest runs in dependency order.
 
     outcomes = run(nodes, store, execute)
 

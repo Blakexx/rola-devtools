@@ -43,6 +43,8 @@ MACHINE: dict[str, dict[str, Key]] = {
         "nice": Key("bool", True, "locked processes lower their own CPU and IO priority"),
         "locks_trace": Key("bool", False, "print every lock acquire and release to stderr"),
         "scratch": Key("path", "/tmp/rola", "the tools' scratch root; never read back as a record"),
+        "build_cache": Key("path", "~/.cache/rola/build", "the build system's cache of completed targets and run "
+                           "workspaces (rola_devtools.build); wipeable"),
         "tools_dir": Key("path", "~/.local/share/rola/tools", "where rola's `tools/dev.py init` installs pinned tools"),
         "windows_system32": Key("path?", None, "WSL only: the Windows System32 directory as mounted in Linux"),
         "wsl_lib": Key("path?", None, "WSL only: the Windows driver's Linux libraries (libdxcore, libcuda); the dev "
