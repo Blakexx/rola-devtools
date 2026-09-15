@@ -14,10 +14,11 @@ import shutil
 from pathlib import Path
 
 
-def store(g, name: str, *, source, location: str, root: str | None = None):
-    """`root` is the rola-results backend directory; None is its own records."""
+def store(g, name: str, *, source, location: str, root: str | None = None, cache: bool = False):
+    """`root` is the rola-results backend directory; None is its own records. `cache`: skip storing a result already
+    stored (for an analysis the build caches, whose key the store's key follows); a measurement stores every run."""
     return g.node(name, executor="rola_devtools.store:put", deps={"source": source},
-                  params={"location": location, "root": root}, cache=False)
+                  params={"location": location, "root": root}, cache=cache)
 
 
 def put(ctx) -> dict:
