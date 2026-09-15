@@ -5,7 +5,7 @@
 
 An EXCLUSIVE node (not timed) is a session of its own: its worker is started, its setup runs, then its execute, and the
 worker is closed; its post runs in a fresh process in its own environment and its record is stored at its location. A
-TIMED node runs in a `Session` beside the members the composer names (a timed node no session names runs alone): every
+TIMED node runs in each `Session` that names it, beside its other members (a timed node no session names runs alone): every
 member's setup in the workers of their environments, then a barrier, then warmup and interleaved rounds of calls in a
 fresh random order each rep, then the workers closed, then each member's post over its samples, then the session's
 record -- every member's samples, its post and its pairings to the reference member -- stored at the session's location.
@@ -213,8 +213,9 @@ def run(instances: list[Instance], store: Callable[[str], object], sessions: lis
     bad = sorted(set(named) - timed)
     if bad:
         raise ValueError(f"sessions name {bad}, which are not timed nodes of the instances")
-    if len(named) != len(set(named)):
-        raise ValueError("a timed node is a member of more than one session")
+    doubled = [s.name for s in sessions if len(set(s.members)) != len(s.members)]
+    if doubled:
+        raise ValueError(f"sessions {doubled} name a member twice")
     sessions = list(sessions) + [Session(q, nodes[q][1]["location"], (q,)) for q in sorted(timed - set(named))]
 
     wanted = set(nodes) if select is None else set()
