@@ -11,6 +11,8 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
 | `rola_devtools.graph` | the build system for measurements: owners declare units (setup, execute, post) and graphs, a composer runs what is not yet stored, timed units interleaved in sessions |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
+| `rola_devtools.config` | the dev config reader: one directory of JSON files a section, every key declared; the machine's `host` and `clock` sections every repository shares |
+| `rola_devtools.locks` | the machine's locks: the GPU lock (exclusive or shared), the host-compute budget and named file locks, the SM clock lock |
 
 ## The public mirror
 
@@ -78,6 +80,33 @@ and the violation persists, a trailing run of at least two over the baseline's s
 Anything less is reported as what it is: `flagged_not_confirmed`, `suspicious`, `insufficient_data` or `no_regression`.
 It takes plain samples; which stored sessions are the baseline is a query over the store (`python -m rola_results
 verdict`).
+
+## The dev config and the machine's locks
+
+Every value that depends on the machine lives in one directory of JSON files, one a section: `~/.config/rola/`, or the
+directory `ROLA_DEV_CONFIG` names (a container, a test). A schema declares each section's keys with a kind, a default and
+a meaning; a key a file holds that its section does not declare is refused, so a typo fails instead of silently taking
+a default. `rola_devtools.config.MACHINE` declares the sections every repository shares -- `host` (lock paths, the
+compute budget, niceness) and `clock` (the SM clock the harness locks) -- and `machine("host.gpu_lock")` reads one value.
+A repository with sections of its own (rola's toolchain, store and workspace) reads its whole schema with
+`read(schema, owns_directory=True)`, which also refuses a file no section declares.
+
+The locks read only those sections, so one host and its containers share one of each:
+
+```python
+from rola_devtools.locks.gpu import gpu_lock
+from rola_devtools.locks import host
+
+with gpu_lock():                      # a measurement: the device to itself (mode="shared" for a correctness run)
+    ...
+with host.acquire(4, label="tidy"):   # up to 4 host-compute slots, at least one
+    ...
+```
+
+`python -m rola_devtools.locks.host [--slots N] [--exclusive] -- <command...>` runs a command under the budget. A nested
+acquire in the same process or a child is a no-op, so an outer tool that locks can start an inner tool that locks.
+`rola_devtools.locks.clock.engage(read_ghz)` locks the clock the host declares, proves it with the device's own reading,
+and unlocks on every exit.
 
 ## Tests and the gate
 

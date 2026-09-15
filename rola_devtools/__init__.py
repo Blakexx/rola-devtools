@@ -7,4 +7,6 @@
   a time in a fresh random order per rep, across worker processes when the arms cannot share one.
 - `rola_devtools.verdict`: whether a candidate's timing is a regression against its baseline.
 - `rola_devtools.process`: a command stopped whole, profiler and measured process included.
+- `rola_devtools.config`: the dev config reader, and the machine sections (`host`, `clock`) every repository shares.
+- `rola_devtools.locks`: the GPU lock, the host-compute budget and file locks, the clock lock.
 """
