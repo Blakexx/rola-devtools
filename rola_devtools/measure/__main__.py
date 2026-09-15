@@ -57,7 +57,8 @@ def main() -> int:
     def store(location):
         return Store(location, root)
 
-    with Service([instance], provenance=lambda inst: checkout(inst.cwd), log=lambda line: print(line, flush=True)) as service:
+    with Service([instance], provenance=lambda inst: {"label": inst.label, **checkout(inst.cwd)},
+                 log=lambda line: print(line, flush=True)) as service:
         built = service.build(store, dry=a.cmd == "plan")
         unbuilt = [o for o in built if o.status not in ("complete", "ran")]
         if unbuilt:
