@@ -3,8 +3,9 @@
     store(g, "store-L1024", source=session, location="timing/session")
 
 The record's semantics are the source target's (its `semantics.json`), so one measured configuration keeps one record
-and every run appends a sample, stamped with the run id; the sample's output is the source's file (`output["file"]`)
-or its output, and its provenance each checkout the source ran in. rola_results is imported here, in the build system's
+and every run appends a sample, stamped with the run id; the sample's output is the source's file (`output["file"]`),
+with the rest of the source's output kept on the sample as its `summary` (each cell's or member's status), or else the
+output itself; its provenance is each checkout the source ran in. rola_results is imported here, in the build system's
 environment, and nowhere a kernel runs.
 """
 from __future__ import annotations
@@ -33,7 +34,9 @@ def put(ctx) -> dict:
     if "file" in output:
         copy = ctx.workspace / output["file"]
         shutil.copyfile(Path(source.dir) / output["file"], copy)
-        sample = store.put(semantics, output_file=copy, provenance=provenance, run=ctx.run)
+        #: the rest of the target's output (each cell's or member's status, a gate's finding) rides on the sample
+        summary = {k: v for k, v in output.items() if k != "file"}
+        sample = store.put(semantics, output_file=copy, provenance=provenance, run=ctx.run, summary=summary)
     else:
         sample = store.put(semantics, output=output, provenance=provenance, run=ctx.run)
     return {"location": ctx.params["location"], "sample": sample["n"], "run": ctx.run}

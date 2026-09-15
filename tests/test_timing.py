@@ -165,6 +165,7 @@ class Timing(unittest.TestCase):
         (record,) = Store("timing/session", self.root / "records").records()
         self.assertEqual([s["run"] for s in record["samples"]], [first["store"].output["run"], second["store"].output["run"]])
         self.assertIn("tip/fast", record["samples"][0]["provenance"]["checkouts"])
+        self.assertEqual([m["status"] for m in record["samples"][0]["summary"]["members"]], ["ok"])
 
 
 if __name__ == "__main__":
