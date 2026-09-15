@@ -9,7 +9,9 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw and the regime it proves, named once; and points (cells grouped by runner, and what they hold equal) |
 | `rola_devtools.interleave` | the interleaving driver: every runner's arms on the cells of one point, timed one call at a time |
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
-| `rola_devtools.graph` | the build system for measurements: owners declare units (setup, execute, post) and graphs, a composer runs what is not yet stored, timed units interleaved in sessions |
+| `rola_devtools.build` | the build system: nodes keyed by their content and their dependencies' outputs; what is stored is skipped, the rest runs in dependency order |
+| `rola_devtools.measure` | the measurement service: packages register units (arms, instruments, builds, clock readers), the service composes them with the central cells into build nodes and sessions and runs them, one worker per instance |
+| `rola_devtools.graph` | the previous measurement graph, kept until rola and rola-bench register with the service |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 | `rola_devtools.config` | the dev config reader: one directory of JSON files a section, every key declared; the machine's `host` and `clock` sections every repository shares |
 | `rola_devtools.locks` | the machine's locks: the GPU lock (exclusive or shared), the host-compute budget and named file locks, the SM clock lock |
@@ -99,6 +101,29 @@ Every carry cell but the two degenerate ones declares where in the routing distr
 coherence, read/write correlation, mass, tail, support; `rola_devtools.cells.regimes`), and `realize` proves the draw is
 there before returning it. A cell's seed comes from its name, so a failure reproduces from the name alone. Loading and
 checking the registry needs only the standard library; realizing a cell needs torch.
+
+## The build system and the measurement service
+
+`rola_devtools.build` is generic. A node is an id, its semantics (a JSON object: everything its result depends on
+besides its dependencies), a store location and its dependencies by role; its key is sha256 over the semantics and each
+dependency's key and output digest, so ids, labels and paths never move a record. `run(nodes, store, execute)` skips
+what the store holds, runs the rest in dependency order through the caller's executor, stores outputs, refusals and
+failures, and blocks the dependents of a refusal or a failure. A node marked local (a build) counts only while its output
+is still on the machine.
+
+`rola_devtools.measure` is the service the packages register with. An owner's registry returns `Registration`s of four
+unit kinds -- `Arm` (timed on a cell), `Instrument` (exclusive), `Build`, `ClockReader` -- and each unit declares which
+cells it accepts and what its result depends on. The service describes every instance in its own environment (one
+worker an instance for the whole run), composes each selected unit with each cell it accepts into a node, gives every
+arm a memory node, and interleaves arms in sessions: every instance's arms of a session on its cells, set up behind a
+barrier, warmed, then called in a fresh random order each rep, with each member paired to the reference instance's arm
+on its cell. Setups, executes and sessions run under the GPU lock with the host's clock proven; posts write results
+through a handle after the device is released.
+
+```bash
+python -m rola_devtools.measure plan benchmarks.registry:registry --cells flagship-dense --units carry.phases
+python -m rola_devtools.measure run  benchmarks.registry:registry --session carry_forward@flagship-dense,flagship-alt-k4
+```
 
 ## The dev config and the machine's locks
 
