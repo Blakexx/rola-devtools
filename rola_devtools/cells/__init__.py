@@ -2,7 +2,7 @@
 
 A CELL is a data provider and its parameters. `data` names a `module:function` that, called with the cell's name and its
 parameters, returns the cell's typed record; the record's own module realizes it into tensors in the worker that runs it,
-and derives any seed from the cell, so a cell reproduces from its name alone. A registry file of cells names `data` once
+from the seed the cell states, so a cell reproduces from its record alone. A registry file of cells names `data` once
 for its records, a record may name its own, and every other field of a record except `name` is a parameter.
 
 THE CENTRAL REGISTRY (`central()`, Blake 2026-09-15: "keeps one consistent source, and if a package doesnt work with one
@@ -25,13 +25,9 @@ with a name pattern (`"name": "flagship-alt-k4-seed{seed}"`) makes one cell per 
 product). A derivation names bases only, never cells. `derive(name, bases, **fields)` is the same for code that
 generates cells, and `Registry.derived` records each derived cell's bases, so a reading can group them.
 
-A POINT is a named group of cells by RUNNER and what the group holds equal: `holds`, the claim in words, recorded with
-every result, and `equal`, the parameters every cell of the point must carry with one value, checked when the registry
-loads.
-
     {"schema": 1, "data": "rola_devtools.cells.carry:carry_cell", "cells": [{"name": "flat-small-alt-k16", ...}]}
-    {"schema": 1, "points": [{"name": "L256-N256-dv64", "holds": "...", "equal": ["tokens", "dv"],
-                              "runners": {"rola": ["flat-small-alt-k16"], "attention": ["qkv-L256-dv64"]}}]}
+
+Which cells launch together, and what they hold equal, is a declaration's (a root's cell lists), never the registry's.
 
 Standard library only: a registry loads and checks without torch; realizing a cell imports torch where it is called.
 """
@@ -49,15 +45,13 @@ FILES = tuple(Path(__file__).with_name(name) for name in ("bases.json", "carry.j
 
 
 class Registry:
-    """Bases, cells and points from any number of registry files. A cell name is unique across every file, and so is a
-    base name; a cell may be DIRECT (a complete record) or DERIVED from bases (`from`, merged in order)."""
+    """Bases and cells from any number of registry files. A cell name is unique across every file, and so is a base
+    name; a cell may be DIRECT (a complete record) or DERIVED from bases (`from`, merged in order)."""
 
-    def __init__(self, cells: dict[str, dict], points: dict[str, dict], bases: dict[str, dict] | None = None,
+    def __init__(self, cells: dict[str, dict], bases: dict[str, dict] | None = None,
                  derived: dict[str, tuple[str, ...]] | None = None) -> None:
-        self.cells, self.points, self.bases = cells, points, bases or {}
+        self.cells, self.bases = cells, bases or {}
         self.derived = derived or {}
-        for point in points.values():
-            self._resolve(point)
 
     @classmethod
     def load(cls, paths) -> Registry:
@@ -66,10 +60,10 @@ class Registry:
             doc = json.loads(path.read_text())
             if doc.get("schema") != SCHEMA:
                 raise ValueError(f"{path}: schema {doc.get('schema')!r}; this reader reads {SCHEMA}")
-            if not {"cells", "points", "bases"} & set(doc):
-                raise ValueError(f"{path}: neither bases, cells nor points")
+            if not {"cells", "bases"} & set(doc):
+                raise ValueError(f"{path}: neither bases nor cells")
             docs.append((path, doc))
-        registry = cls({}, {})
+        registry = cls({})
         base_origin: dict[str, str] = {}
         for path, doc in docs:
             for base in doc.get("bases", []):
@@ -85,11 +79,6 @@ class Registry:
                     registry.cells[name] = {"name": name, "data": data, "params": params}
                     if bases:
                         registry.derived[name] = bases
-            for point in doc.get("points", []):
-                cls._claim(origin, point["name"], path)
-                registry.points[point["name"]] = point
-        for point in registry.points.values():
-            registry._resolve(point)
         return registry
 
     def _expand(self, record: dict, default_data: str | None, where) -> list[tuple[str, str, dict, tuple[str, ...]]]:
@@ -137,32 +126,6 @@ class Registry:
         if name not in self.cells:
             raise KeyError(f"no cell {name!r} in the registry")
         return self.cells[name]
-
-    def point(self, name: str) -> dict:
-        """The point with its cells resolved to their records: `{name, holds, equal, runners: {runner: [record]}}`."""
-        if name not in self.points:
-            raise KeyError(f"no point {name!r} in the registry")
-        return self._resolve(self.points[name])
-
-    def adhoc(self, runners: dict[str, list[str]], holds: str = "", equal: tuple[str, ...] = ()) -> dict:
-        """An unregistered point, resolved and checked like a registered one; its name says it is not one."""
-        return self._resolve({"name": "adhoc:" + ",".join(f"{r}={'+'.join(c)}" for r, c in sorted(runners.items())),
-                              "holds": holds, "equal": list(equal), "runners": runners})
-
-    def _resolve(self, point: dict) -> dict:
-        name, runners = point["name"], point.get("runners") or {}
-        if not runners or any(not cells for cells in runners.values()):
-            raise ValueError(f"point {name}: every runner it names needs at least one cell, got {runners}")
-        missing = sorted({c for cells in runners.values() for c in cells} - set(self.cells))
-        if missing:
-            raise KeyError(f"point {name} names cells no registry holds: {missing}")
-        resolved = {runner: [self.cells[c] for c in cells] for runner, cells in runners.items()}
-        for field in point.get("equal", []):
-            values = {c["name"]: c["params"].get(field) for records in resolved.values() for c in records}
-            if len({json.dumps(v, sort_keys=True) for v in values.values()}) != 1 or None in values.values():
-                raise ValueError(f"point {name} holds {field} equal, but its cells carry {values}")
-        return {"name": name, "holds": point.get("holds", ""), "equal": list(point.get("equal", [])),
-                "runners": resolved}
 
 
 def build(record: dict):

@@ -6,11 +6,11 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | Module | What it is |
 |---|---|
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
-| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw and the regime it proves, named once; and points (cells grouped by runner, and what they hold equal) |
-| `rola_devtools.interleave` | the interleaving driver: every runner's arms on the cells of one point, timed one call at a time |
-| `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
-| `rola_devtools.build` | the build system: nodes keyed by their content and their dependencies' outputs; what is stored is skipped, the rest runs in dependency order |
-| `rola_devtools.measure` | the measurement service: packages register units (arms, instruments, builds, clock readers), the service composes them with the central cells into build nodes and sessions and runs them, one worker per instance |
+| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them |
+| `rola_devtools.build` | the declared build system: targets declared by composable functions in files, keyed by what they read, cached or run in dependency order, holding the machine's resources, each in its own environment's worker |
+| `rola_devtools.timing` | the timing system, as targets: a server of entry workers, registrations of timed callables on cells, interleaved clock-locked sessions, memory passes, null gates |
+| `rola_devtools.store` | the store target: a result written through rola-results as a run-stamped sample of its source's record |
+| `rola_devtools.verdict` | whether a candidate's timing is a regression against a reference timed in the same sessions: effect size, paired significance, persistence |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 | `rola_devtools.config` | the dev config reader: one directory of JSON files a section, every key declared; the machine's `host` and `clock` sections every repository shares |
 | `rola_devtools.locks` | the machine's locks: the GPU lock (exclusive or shared), the host-compute budget and named file locks, the SM clock lock |
@@ -44,32 +44,49 @@ python -m rola_devtools.mirror --check       # every tracked path declared
 python -m rola_devtools.mirror --public      # the public repository
 ```
 
-## The interleaving driver
+## The declared build system
 
-A **comparison** is a point (what is held equal across the libraries: tokens, value width, dtype, capacity) and the
-matching rule that makes it fair, named. Each library realizes the point as its own native cell through a **provider**,
-`module:function`, which takes the point and returns a builder per arm name; the worker builds only the arms a
-comparison asks for, so an arm the library cannot build refuses by name without blocking the others. An `Arm` is the
-cell the library built and a call that runs one timed unit, returning its elapsed milliseconds by the stopwatch the arm
-names, the device synchronized. Arms are never asked to share a cell; every result row keeps the point and its own cell.
-
-The driver knows no library. It starts one worker process per provider environment (a python, a directory, an
-environment: two builds of one library are two workers), prepares every arm, warms each past the floor of 10 launches,
-and then calls each arm once per rep in a fresh random order. The samples of one rep are adjacent in time, so a drift
-step lands on every arm alike. The paired statistic is the median of the per-rep ratios to a reference arm; the
-per-round differences are what a significance test reads. Timing happens inside the worker, so the pipe between
-processes is never in a sample, and one comparison uses one stopwatch. `null_gate` runs one arm in two workers: a
-comparison across workers is trusted once its per-rep ratios put one inside their interquartile range.
+A DECLARATION FILE is plain Python, loaded by path, whose functions declare TARGETS on a graph. A target is an executor
+(`module:function`) that runs in an environment (`Env`: a python, a directory, variables; none is the build system's
+own), the targets it reads by role, the central cells it takes, its parameters, the resources it holds while it runs,
+whether it caches, whether it runs after a failure (`always_run`), a function that confirms a cached result still holds
+on this machine (`verify`), and the code its result depends on. A group is a target with no executor. Labels are scoped
+(`g.scoped("tip")`), so one function declares one checkout's targets under any label, and a root composes declaration
+files from several checkouts:
 
 ```python
-from rola_devtools.interleave import ArmSpec, interleave
-
-result = interleave(
-    {"tokens": 4096, "d_v": 64},
-    [ArmSpec("rola", "bench.arms:carry", "prefill", python="/path/to/venv-a/bin/python", cwd="/path/to/rola-a"),
-     ArmSpec("attention", "bench.arms:attention", "flash")],
-    matching="capacity at N = L", reference="attention", hold=gpu_and_clock_lock)
+def root(g, target):
+    rola = load(Path(target) / "declare.py")
+    tip = rola["declare"](g.scoped("tip"), rola["checkout"](target, python=..., label="tip"), cells=["flagship-dense"])
+    return {"all": g.group("all", [tip["binary"], *tip["instruments"].values()])}
 ```
+
+A target's KEY is sha256 over its executor, parameters, declared code digest, its cells' records with the digest of the
+code that draws them, and each dependency's key and output digest; labels, paths and run ids never enter it. The
+scheduler takes the targets in dependency order: a cached target whose key the build cache holds (`host.build_cache`,
+wipeable) is skipped, the rest run with their resources held -- `{"gpu": "all"}`, `{"gpu": 1}`, `{"host_cpu": 8}`,
+`{"clock": 1}`, counting semaphores over the machine's own locks, so processes outside the build are excluded too. An
+exception is a BUILD failure: the build stops scheduling and only `always_run` targets still run. What a target records
+as failed inside its own output (a timing entry whose kernel is not built) is its domain's, and the build goes on.
+
+```bash
+python -m rola_devtools.build plan declare.py:all
+python -m rola_devtools.build run  declare.py:all --arg cells=flagship-dense,flagship-alt-k4
+```
+
+## The timing system
+
+Timing is a client of the build system (`rola_devtools.timing`). `start_timing_server` starts a pool of entry workers,
+one per checkout environment; `register_timing` is one target registering a checkout's timed callable on every cell it
+takes, as ENTRIES; `measure_timing` is a session over the entries of any registrations: every entry set up behind a
+barrier, warmed past a floor of 10 calls, then called one at a time in a fresh random order each rep, with the entry's
+untimed reset before every call, under the GPU and clock locks with the clock read through a registered reader before
+and after. The session keeps every sample in the order taken, with its round, rep and position; which entry is the
+reference is chosen when the samples are read. An entry that cannot set up is recorded as that member's failure; two
+stopwatches or a clock off the lock fail the build. `measure_memory` takes each entry alone, and `measure_null_gate`
+times one registration's entries against copies of themselves in second workers, finding a worker's bias.
+`rola_devtools.store.store` writes a target's result through rola-results as a run-stamped sample of the record its
+source's semantics key.
 
 ## The verdict
 
@@ -100,31 +117,10 @@ drawn = carry.realize(cell("flagship-alt-k4"))   # bf16 read/write levels, gain,
 
 Every carry cell but the two degenerate ones declares where in the routing distribution it sits on six axes (density,
 coherence, read/write correlation, mass, tail, support; `rola_devtools.cells.regimes`), and `realize` proves the draw is
-there before returning it. A cell's seed comes from its name, so a failure reproduces from the name alone. Loading and
-checking the registry needs only the standard library; realizing a cell needs torch.
-
-## The build system and the measurement service
-
-`rola_devtools.build` is generic. A node is an id, its semantics (a JSON object: everything its result depends on
-besides its dependencies), a store location and its dependencies by role; its key is sha256 over the semantics and each
-dependency's key and output digest, so ids, labels and paths never move a record. `run(nodes, store, execute)` skips
-what the store holds, runs the rest in dependency order through the caller's executor, stores outputs, refusals and
-failures, and blocks the dependents of a refusal or a failure. A node marked local (a build) counts only while its output
-is still on the machine.
-
-`rola_devtools.measure` is the service the packages register with. An owner's registry returns `Registration`s of four
-unit kinds -- `Arm` (timed on a cell), `Instrument` (exclusive), `Build`, `ClockReader` -- and each unit declares which
-cells it accepts and what its result depends on. The service describes every instance in its own environment (one
-worker an instance for the whole run), composes each selected unit with each cell it accepts into a node, gives every
-arm a memory node, and interleaves arms in sessions: every instance's arms of a session on its cells, set up behind a
-barrier, warmed, then called in a fresh random order each rep, with each member paired to the reference instance's arm
-on its cell. Setups, executes and sessions run under the GPU lock with the host's clock proven; posts write results
-through a handle after the device is released.
-
-```bash
-python -m rola_devtools.measure plan benchmarks.registry:registry --cells flagship-dense --units carry.phases
-python -m rola_devtools.measure run  benchmarks.registry:registry --session carry_forward@flagship-dense,flagship-alt-k4
-```
+there before returning it. Every cell states the seed its data is drawn from, so a failure reproduces from the record.
+A base (`bases.json`) is a fragment, never a cell; a derived cell merges the bases its `from` lists in order, and `vary`
+with a name pattern makes one cell per value. Loading and checking the registry needs only the standard library;
+realizing a cell needs torch.
 
 ## The dev config and the machine's locks
 

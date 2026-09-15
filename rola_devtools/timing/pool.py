@@ -1,5 +1,9 @@
 """THE TIMING SERVER'S POOL: one entry worker per checkout environment, started on first use, stopped by stop_timing_server.
 
+An environment is a python, a directory and an import path; every registration made in it shares its worker, so a build
+holds one device context per checkout, whatever it registers. A null gate's second copy names an `instance`, the one
+thing that starts a second worker in one environment.
+
 It lives in the build system's own worker for the whole build (a module-level object the timing executors share), so
 workers and whatever the device holds between sessions are the pool's, and a session sets up and drops its own entries.
 """
@@ -62,7 +66,7 @@ class Pool:
         self.workers: dict[tuple, EntryWorker] = {}
 
     def worker(self, env: dict) -> EntryWorker:
-        key = (env["python"], env["cwd"], env.get("pythonpath") or "", env["label"])
+        key = (env["python"], env["cwd"], env.get("pythonpath") or "", env.get("instance", ""))
         worker = self.workers.get(key)
         if worker is None or not worker.alive:
             worker = self.workers[key] = EntryWorker(env)

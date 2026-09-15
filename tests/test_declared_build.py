@@ -138,5 +138,26 @@ class Declared(unittest.TestCase):
             Graph().node("w", executor="fake_executors:echo", deps={"x": g.targets["x"]})
 
 
+class Identity(unittest.TestCase):
+    def test_a_code_key_follows_imports_inside_the_root_and_moves_with_their_bytes(self):
+        from rola_devtools.build import identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "__init__.py").write_text("")
+            (root / "pkg" / "helper.py").write_text("X = 1\n")
+            (root / "entry.py").write_text("import json\nfrom pkg.helper import X\n")
+            (root / "data.json").write_text("{}")
+            before = identity.code(root, "entry.py", data=("data.json",))
+            self.assertEqual(before, identity.code(root, "entry.py", data=("data.json",)))
+            (root / "pkg" / "helper.py").write_text("X = 2\n")
+            after = identity.code(root, "entry.py", data=("data.json",))
+            self.assertNotEqual(before, after)
+            (root / "data.json").write_text('{"a": 1}')
+            self.assertNotEqual(after, identity.code(root, "entry.py", data=("data.json",)))
+            self.assertEqual(identity.files(root, ["pkg"]), identity.files(root, ["pkg"]))
+
+
 if __name__ == "__main__":
     unittest.main()

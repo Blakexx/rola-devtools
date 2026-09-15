@@ -1,7 +1,8 @@
 """The timing system on the declared build system: registrations run in their checkout's environment and build
 nothing, a session sets its entries up behind a barrier and interleaves them with an untimed reset before every call,
 an entry that cannot set up is recorded while the rest are timed, two stopwatches or a clock off the lock fail the
-build, the server's workers are stopped however the build ends, and memory is each entry alone.
+build, the server's workers are stopped however the build ends, memory is each entry alone, registrations in one
+environment share its worker, and a null gate finds a worker's bias.
 `python -m unittest tests.test_timing`"""
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ from rola_devtools.build.scheduler import build
 from rola_devtools.cells import Registry
 from rola_devtools.timing.declare import (
     measure_memory,
+    measure_null_gate,
     measure_timing,
     register_clock_reader,
     register_timing,
@@ -40,7 +42,7 @@ class Timing(unittest.TestCase):
         (self.root / "config").mkdir()
         self.host = {"gpu_lock": str(self.root / "gpu.lock"), "lock_dir": str(self.root), "nice": False}
         (self.root / "config" / "host.json").write_text(json.dumps(self.host))
-        self.saved = {k: os.environ.get(k) for k in (config.POINTER, "FAKE_CLOCK_GHZ")}
+        self.saved = {k: os.environ.get(k) for k in (config.POINTER, "FAKE_CLOCK_GHZ", "FAKE_BIAS_DIR")}
         os.environ[config.POINTER] = str(self.root / "config")
         config.reload()
         self.registry = Registry.load([self.root / "cells.json"])
@@ -127,6 +129,28 @@ class Timing(unittest.TestCase):
         rows = json.loads((Path(out["memory"].dir) / "memory.json").read_text())["rows"]
         self.assertEqual([r["status"] for r in rows], ["ok", "failed"])
         self.assertEqual(rows[0]["calls"], 5)
+
+    def test_registrations_in_one_environment_share_its_worker(self):
+        _g, session, stop = self.graph([("tip/fast", "tip", "fixed", ["t8"], {"ms": 1.0}),
+                                        ("tip/slow", "tip", "fixed", ["t16"], {"ms": 2.0})])
+        doc = self.session(self.go([stop])["session"])
+        self.assertEqual(len({m["built"]["pid"] for m in doc["members"]}), 1)
+
+    def test_a_null_gate_trusts_an_unbiased_entry_and_finds_a_biased_one(self):
+        os.environ["FAKE_BIAS_DIR"] = str(self.root)
+        g = Graph()
+        server = start_timing_server(g)
+        clock = register_clock_reader(g, "clock", server=server, env=self.env("tip"), executor="fake_entries:clock")
+        gates = [measure_null_gate(g, f"null/{name}", server=server, clock=clock, rounds=2, reps=3,
+                                   entry=register_timing(g, name, server=server, env=self.env("tip"),
+                                                         executor=f"fake_entries:{ex}", cells=["t8"], params=params))
+                 for name, ex, params in (("fast", "fixed", {"ms": 1.0}), ("biased", "biased", {}))]
+        out = self.go([stop_timing_server(g, server=server, after=gates)])
+        fair, biased = out["null/fast"].output["cells"]["t8"], out["null/biased"].output["cells"]["t8"]
+        self.assertEqual((fair["trusted"], fair["ratio_median"]), (True, 1.0))
+        self.assertEqual((biased["trusted"], biased["ratio_median"]), (False, 0.5))
+        doc = json.loads((Path(out["null/biased"].dir) / "session.json").read_text())
+        self.assertEqual(len({m["built"]["pid"] for m in doc["members"]}), 2)
 
     def test_a_stored_session_appends_a_run_stamped_sample_to_its_configurations_record(self):
         from rola_devtools.store import store

@@ -12,6 +12,8 @@ system's own worker for the run). The targets (`declare.py` builds them):
                            fresh random order each rep, each call preceded by the entry's untimed reset; the clock
                            proven before and after; every sample stored in the order taken
     measure_memory         each entry alone: the allocator's peak over its calls, plus what it holds outside it
+    measure_null_gate      one registration's entries each timed against a copy of itself in a second worker: where
+                           the per-rep ratios put one outside their interquartile range, a worker's bias is found
     stop_timing_server     always_run: the server's workers stopped
 
 An ENTRY EXECUTOR, in the checkout, is `executor(cell, params) -> Timed`: `call()` runs one launch and returns its

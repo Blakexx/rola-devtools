@@ -1,4 +1,4 @@
-"""IDENTITIES: what a result depends on, reduced to hashes a unit returns from `identity()`.
+"""IDENTITIES: what a result depends on, reduced to hashes -- a target's declared code (`code=`) and the draw's files.
 
     files(root, paths)             the named files and directories, path and bytes each
     code(root, entry, roots, data) a module and every repository file it imports, transitively, plus data files

@@ -75,16 +75,17 @@ def _read_clock(srv, reader, markers):
         {"op": "clock", "executor": reader.output["clock"], "env": markers}, "the clock reader")["ghz"]
 
 
-def measure(ctx) -> dict:
+def _session(ctx, entries: list[dict], reader) -> dict:
+    """One interleaved session over `entries`, kept in the workspace's session.json. Raises for what fails the build: a
+    clock off the lock, two stopwatches, a worker lost."""
     srv, markers, cfg = pool.server(), _markers(), clock.load()
-    entries, reader = _entries(ctx)
     if cfg is not None and reader is None:
         raise RuntimeError("this host locks its clock and the session has no clock reader to prove it (register_clock_reader)")
     before = _read_clock(srv, reader, markers)
     if cfg is not None and not clock.within(before, cfg):
         raise RuntimeError(f"CLOCK: the device reads {before} GHz before the session, off the lock at {cfg['ghz']} GHz")
     p, draw = ctx.params, _draw()
-    members, set_up = [], []
+    members, set_up, instruments = [], [], []
     try:
         for i, entry in enumerate(entries):
             member = {"id": f"m{i}", "owner": entry["owner"], "cell": entry["cell"], "executor": entry["executor"]}
@@ -128,8 +129,44 @@ def measure(ctx) -> dict:
     if cfg is not None and not clock.within(after, cfg):
         raise RuntimeError(f"CLOCK: the device reads {after} GHz after the session, off the lock at {cfg['ghz']} GHz; "
                            "its samples are kept in session.json and stored by nothing")
-    return {"members": [{k: m.get(k) for k in ("id", "owner", "cell", "status", "error")} for m in members],
-            "samples": len(samples), "file": "session.json",
+    return session
+
+
+def measure(ctx) -> dict:
+    entries, reader = _entries(ctx)
+    session = _session(ctx, entries, reader)
+    return {"members": [{k: m.get(k) for k in ("id", "owner", "cell", "status", "error")} for m in session["members"]],
+            "samples": len(session["samples"]), "file": "session.json",
+            "local": {"envs": {e["owner"]: e["env"] for e in entries}}}
+
+
+def _quartiles(values: list[float]) -> tuple[float, float, float]:
+    ordered = sorted(values)
+    return ordered[int(0.25 * len(ordered))], ordered[len(ordered) // 2], ordered[int(0.75 * len(ordered))]
+
+
+def null_gate(ctx) -> dict:
+    """ONE ENTRY IN TWO WORKERS: each entry the registration makes, set up twice -- `#a` and `#b`, each in its own worker
+    of the entry's environment -- and timed as one session. On a cell the gate is `trusted` when the per-rep ratios of
+    the two copies, a over b, put one inside their interquartile range: a comparison across workers then carries no
+    worker's bias. An untrusted cell is the gate's finding, recorded in its output; the build goes on."""
+    entries, reader = _entries(ctx)
+    copies = [{**e, "owner": f"{e['owner']}#{copy}", "env": {**e["env"], "instance": copy}} for e in entries for copy in "ab"]
+    session = _session(ctx, copies, reader)
+    ids = {(m["owner"], m["cell"]): m for m in session["members"]}
+    ms = {(s["member"], s["round"], s["rep"]): s["ms"] for s in session["samples"]}
+    cells = {}
+    for e in entries:
+        a, b = ids[(f"{e['owner']}#a", e["cell"])], ids[(f"{e['owner']}#b", e["cell"])]
+        if a["status"] != "ok" or b["status"] != "ok":
+            cells[e["cell"]] = {"trusted": None, "error": a.get("error") or b.get("error")}
+            continue
+        ratios = [ms[(a["id"], r, k)] / ms[(b["id"], r, k)] for r in range(session["rounds"]) for k in range(session["reps"])
+                  if ms[(b["id"], r, k)] > 0]
+        q1, median, q3 = _quartiles(ratios)
+        cells[e["cell"]] = {"trusted": q1 <= 1.0 <= q3, "ratio_median": median, "ratio_q1": q1, "ratio_q3": q3}
+    return {"members": [{k: m.get(k) for k in ("id", "owner", "cell", "status", "error")} for m in session["members"]],
+            "samples": len(session["samples"]), "cells": cells, "file": "session.json",
             "local": {"envs": {e["owner"]: e["env"] for e in entries}}}
 
 

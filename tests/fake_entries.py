@@ -9,7 +9,8 @@ from rola_devtools.timing import Timed
 
 def fixed(cell, params) -> Timed:
     ms = params["ms"] * cell.tokens
-    return Timed(call=lambda: ms, built={"ms": ms, "held": os.environ.get("ROLA_GPU_LOCK_HELD")}, instrument="fixed")
+    return Timed(call=lambda: ms, built={"ms": ms, "held": os.environ.get("ROLA_GPU_LOCK_HELD"), "pid": os.getpid()},
+                 instrument="fixed")
 
 
 def stateful(cell, params) -> Timed:
@@ -24,6 +25,17 @@ def stateful(cell, params) -> Timed:
         state["step"] = 0
 
     return Timed(call=call, built={}, instrument="fixed", reset=reset if params.get("reset") else None)
+
+
+def biased(cell, params) -> Timed:
+    """A call whose time depends on the worker it runs in: the first worker to build it on a cell is twice as fast as any
+    other, a worker's bias a null gate exists to find."""
+    try:
+        with open(os.path.join(os.environ["FAKE_BIAS_DIR"], cell.name), "x"):
+            ms = 1.0
+    except FileExistsError:
+        ms = 2.0
+    return Timed(call=lambda: ms, built={"pid": os.getpid()}, instrument="fixed")
 
 
 def unbuilt(cell, params) -> Timed:
