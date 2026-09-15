@@ -133,6 +133,10 @@ class Graph(unittest.TestCase):
         self.assertEqual(doc["relation"], {"holds": "one fake cell"})
         self.assertEqual(self.go(sessions=[session], select={"fake:fast"})["fast-vs-slow"].status, "complete")
 
+    def test_a_session_every_member_refuses_is_refused(self):
+        session = Session("nothing-built", "fake/sessions", ("fake:unbuilt",), rounds=1, reps=1)
+        self.assertEqual(self.go(sessions=[session], select={"fake:unbuilt"})["nothing-built"].status, "refused")
+
 
 class Identity(unittest.TestCase):
     def test_a_code_key_follows_imports_inside_the_root_and_moves_with_their_bytes(self):

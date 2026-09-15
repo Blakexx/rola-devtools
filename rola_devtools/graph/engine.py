@@ -337,8 +337,9 @@ def _session(session: Session, nodes, store, hold, repeat, force, dry, provenanc
         wall = time.time() - started
         st.put(semantics, output={**doc, "relation": session.relation}, wall_s=wall,
                provenance={"members": [provenance(i.env) for i, _n in members]})
-    log(f"ran       session {session.name} [{k[:12]}] {wall:.1f}s")
-    return Outcome(session.name, k, "ran", wall)
+    status = "ran" if doc["members"] else "refused"
+    log(f"{status:9s} session {session.name} [{k[:12]}] {wall:.1f}s" + ("" if doc["members"] else f": {doc['refused']}"))
+    return Outcome(session.name, k, status, wall, "" if doc["members"] else json.dumps(doc["refused"]))
 
 
 def _interleave(session: Session, nodes, root: Path, hold) -> dict:
