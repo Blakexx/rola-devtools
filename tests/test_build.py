@@ -1,5 +1,6 @@
 """The build system alone: nodes in dependency order, keys from content and never from ids, stored results skipped, a
 local result re-run when it is no longer present, refusals and failures stored, dependents of either blocked.
+Identities (`rola_devtools.build.identity`) hash a module's imports inside its root and move with their bytes.
 `python -m unittest tests.test_build`"""
 from __future__ import annotations
 
@@ -93,6 +94,27 @@ class Build(unittest.TestCase):
     def test_an_execution_that_is_not_exactly_one_result_fails(self):
         self.results["a"] = Executed()
         self.assertEqual(self.go([Node("a", {"n": 1}, "loc")])["a"].status, "failed")
+
+
+class Identity(unittest.TestCase):
+    def test_a_code_key_follows_imports_inside_the_root_and_moves_with_their_bytes(self):
+        from rola_devtools.build import identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "__init__.py").write_text("")
+            (root / "pkg" / "helper.py").write_text("X = 1\n")
+            (root / "entry.py").write_text("import json\nfrom pkg.helper import X\n")
+            (root / "data.json").write_text("{}")
+            before = identity.code(root, "entry.py", data=("data.json",))
+            self.assertEqual(before, identity.code(root, "entry.py", data=("data.json",)))
+            (root / "pkg" / "helper.py").write_text("X = 2\n")
+            after = identity.code(root, "entry.py", data=("data.json",))
+            self.assertNotEqual(before, after)
+            (root / "data.json").write_text('{"a": 1}')
+            self.assertNotEqual(after, identity.code(root, "entry.py", data=("data.json",)))
+            self.assertEqual(identity.files(root, ["pkg"]), identity.files(root, ["pkg"]))
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against its baseline: effect size, paired significance, persistence |
 | `rola_devtools.build` | the build system: nodes keyed by their content and their dependencies' outputs; what is stored is skipped, the rest runs in dependency order |
 | `rola_devtools.measure` | the measurement service: packages register units (arms, instruments, builds, clock readers), the service composes them with the central cells into build nodes and sessions and runs them, one worker per instance |
-| `rola_devtools.graph` | the previous measurement graph, kept until rola and rola-bench register with the service |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 | `rola_devtools.config` | the dev config reader: one directory of JSON files a section, every key declared; the machine's `host` and `clock` sections every repository shares |
 | `rola_devtools.locks` | the machine's locks: the GPU lock (exclusive or shared), the host-compute budget and named file locks, the SM clock lock |
