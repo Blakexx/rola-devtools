@@ -1,19 +1,21 @@
-"""THE VERDICT: whether a candidate's timing is a regression against its baseline, from samples alone.
+"""THE VERDICT: whether a candidate's timing is a regression against a reference timed in the same sessions.
 
-Three gates, and a regression needs all three:
+Timing is comparable only within the session that interleaved it, so every gate reads within-session quantities.
+:func:`session` turns one session's two arms -- the candidate's and the reference's samples, grouped by round -- into the
+paired quantities: per round each arm's median, their RATIO (candidate over reference) and their DIFFERENCE. Three gates,
+and a regression needs all three:
 
-1. EFFECT SIZE -- the candidate's median above :func:`threshold_ms`, which is the baseline's own median plus three sigmas
-   of its own spread (sigma from the interquartile range), and never of a spread smaller than the stopwatch can resolve
-   (:func:`resolution`). Never a flat percentage.
-2. SIGNIFICANCE -- :func:`paired_verdict`: an exact Wilcoxon signed-rank test over the per-round differences, candidate
-   minus baseline, that one interleaved session produced. Paired, because the interleaving paid for the pairing; exact,
-   because the round counts are single digits.
-3. PERSISTENCE -- :func:`classify_flags` over the baseline's own violations followed by the candidate's runs in order:
-   a regression is a trailing run of at least two violations. One unlucky run is not one.
+1. EFFECT SIZE -- the session's median ratio above :func:`ratio_limit`: one plus three sigmas of the per-round ratios'
+   own spread (sigma from the interquartile range), never of a spread smaller than the stopwatch can resolve
+   (:func:`resolution`, relative to the reference). Never a flat percentage.
+2. SIGNIFICANCE -- :func:`paired_verdict`: an exact Wilcoxon signed-rank test over the session's per-round differences.
+   Paired, because the interleaving paid for the pairing; exact, because the round counts are single digits.
+3. PERSISTENCE -- :func:`persistence` over the candidate's sessions against the same reference, in order: a regression
+   is a trailing run of at least two sessions over their own limits. One unlucky session is not one.
 
 Anything short of all three is reported as what it is (`flagged_not_confirmed`, `suspicious`, `insufficient_data`,
-`no_regression`), never as a pass. The functions take plain numbers; which samples count as a baseline is a query over
-stored records, and belongs to the store (`rola_results`).
+`no_regression`), never as a pass. The functions take plain numbers; which stored sessions and which reference are read
+is a query over the records, and belongs to the store (`rola_results`).
 """
 from __future__ import annotations
 
@@ -29,12 +31,10 @@ MIN_ROUNDS = math.ceil(math.log2(2 / ALPHA))
 #: Above this many non-zero differences the exact enumeration's 2**n terms give way to the normal approximation, which is
 #: accurate there to well past the third decimal of p.
 EXACT_MAX_N = 20
-#: The one free choice of the effect-size gate: a one-sided three-sigma alarm, about 0.1 % false alarms per cell per run.
+#: The one free choice of the effect-size gate: a one-sided three-sigma alarm, about 0.1 % false alarms per cell per session.
 ALARM_SIGMA = 3.0
 #: Q3 - Q1 of a normal sample, in sigmas: what turns a measured interquartile range into a sigma.
 IQR_PER_SIGMA = 1.349
-#: The fewest baseline sessions a threshold is derived from.
-MIN_BASELINE = 3
 
 
 def iqr(values: list[float]) -> float:
@@ -42,23 +42,23 @@ def iqr(values: list[float]) -> float:
     return ordered[int(0.75 * len(ordered))] - ordered[int(0.25 * len(ordered))]
 
 
-def resolution(sessions: list[list[float]]) -> float:
+def resolution(arms: list[list[float]]) -> float:
     """The stopwatch's resolution as the samples themselves show it: the smallest gap between two distinct values WITHIN
-    one session (0.0 where no session has two). A device-event timer quantizes, so sessions of a small kernel can land on
-    one value every time; their spread is then zero, a threshold at the median, and the next tick over it. Within a
-    session, never across two: a gap between sessions is the effect being judged, not the stopwatch. Measured on every
-    judgement rather than stored, because it is a property of the stopwatch and the box, and a stored copy could disagree
-    with the samples."""
+    one arm's samples (0.0 where no arm has two). A device-event timer quantizes, so a small kernel's calls can land on
+    one value every time; the per-round ratios' spread is then zero, a limit at the median ratio, and the next tick over
+    it. Within an arm, never across two: a gap between the arms is the effect being judged, not the stopwatch. Measured
+    on every judgement rather than stored, because it is a property of the stopwatch and the box, and a stored copy could
+    disagree with the samples."""
     gaps = []
-    for samples in sessions:
+    for samples in arms:
         distinct = sorted(set(samples))
         gaps += [b - a for a, b in zip(distinct, distinct[1:], strict=False)]
     return min(gaps, default=0.0)
 
 
-def threshold_ms(median_ms: float, iqr_ms: float) -> float:
-    """The latency above which a candidate is over the line: derived from the baseline's own median and spread."""
-    return median_ms + ALARM_SIGMA * iqr_ms / IQR_PER_SIGMA
+def ratio_limit(ratio_iqr: float) -> float:
+    """The ratio above which a candidate is over the line: one plus three sigmas of the per-round ratios' own spread."""
+    return 1.0 + ALARM_SIGMA * ratio_iqr / IQR_PER_SIGMA
 
 
 def _signed_rank_statistic(diffs: list[float]) -> tuple[float, list[float]]:
@@ -118,12 +118,12 @@ def paired_verdict(diffs: list[float], *, alpha: float = ALPHA) -> dict:
     return {"verdict": verdict, "p": p, "n": len(ranks), "w_plus": w_plus, "exact": exact}
 
 
-def classify_flags(violations: list[bool]) -> str:
-    """The persistence rule over violations in order, the last the run being judged: `regression` for a trailing run of
-    at least two, `suspicious` for a run of at least three that has stopped, `insufficient_data` below three points,
-    otherwise `no_regression`."""
+def persistence(violations: list[bool]) -> str:
+    """The persistence rule over one candidate's sessions against one reference, oldest first, the last the one judged:
+    `regression` for a trailing run of at least two violations, `suspicious` for a run of at least two that has stopped,
+    `insufficient_data` for a single session, otherwise `no_regression`."""
     flags = [bool(v) for v in violations]
-    if len(flags) < 3:
+    if len(flags) < 2:
         return "insufficient_data"
     trailing = 0
     for flag in reversed(flags):
@@ -136,31 +136,43 @@ def classify_flags(violations: list[bool]) -> str:
     for flag in flags:
         run = run + 1 if flag else 0
         best = max(best, run)
-    return "suspicious" if best >= 3 else "no_regression"
+    return "suspicious" if best >= 2 else "no_regression"
 
 
-def classify(baseline: list[list[float]], runs: list[list[float]], *, paired_diffs: list[float] | None = None) -> dict:
-    """THE FLAGGING RULE over samples: `baseline` is the baseline's sessions (each a list of samples, oldest first), from
-    which the threshold is derived; `runs` are the candidate's sessions in order, the last the one judged; `paired_diffs`
-    are that last session's per-round differences, candidate minus baseline."""
-    if len(baseline) < MIN_BASELINE or not runs:
-        return {"verdict": "insufficient_data", "n_baseline": len(baseline), "n_runs": len(runs),
-                "reason": f"fewer than {MIN_BASELINE} baseline sessions, or no run to judge"}
-    medians = [statistics.median(samples) for samples in baseline]
-    base_median, base_iqr = statistics.median(medians), iqr(medians)
-    tick = resolution(baseline + runs)
-    limit = threshold_ms(base_median, max(base_iqr, tick))
-    run_medians = [statistics.median(samples) for samples in runs]
-    got = run_medians[-1]
-    persistence = classify_flags([m > limit for m in medians] + [m > limit for m in run_medians])
-    significance = (paired_verdict(paired_diffs) if paired_diffs is not None
-                    else {"verdict": "insufficient_data", "p": None, "reason": "no paired rounds for the judged run"})
-    if got > limit:
-        verdict = ("regression" if significance["verdict"] == "b_slower" and persistence == "regression"
-                   else "flagged_not_confirmed")
+def session(candidate: list[list[float]], reference: list[list[float]]) -> dict:
+    """ONE SESSION'S PAIRED QUANTITIES from the candidate's and the reference's samples in milliseconds, each a list of
+    rounds of reps, from one interleaved session. Refuses arms of different round counts and a reference round whose
+    median is zero (it has no ratio)."""
+    if not candidate or len(candidate) != len(reference):
+        raise ValueError(f"paired arms need the same rounds, got {len(candidate)} and {len(reference)}")
+    c = [statistics.median(r) for r in candidate]
+    b = [statistics.median(r) for r in reference]
+    if min(b) <= 0:
+        raise ValueError("a reference round's median is zero: the stopwatch did not resolve it, and it has no ratio")
+    ratios = [x / y for x, y in zip(c, b, strict=True)]
+    spread = iqr(ratios)
+    tick = resolution([[v for r in candidate for v in r], [v for r in reference for v in r]]) / statistics.median(b)
+    limit = ratio_limit(max(spread, tick))
+    ratio = statistics.median(ratios)
+    return {"ratio": ratio, "limit": limit, "ratio_iqr": spread, "resolution": tick, "floored_at_resolution": tick > spread,
+            "violation": ratio > limit, "diffs_ms": [x - y for x, y in zip(c, b, strict=True)], "rounds": len(c),
+            "candidate_ms": statistics.median(c), "reference_ms": statistics.median(b)}
+
+
+def classify(sessions: list[dict]) -> dict:
+    """THE FLAGGING RULE: `sessions` are one candidate's sessions against one reference (each :func:`session`'s
+    quantities), oldest first, the last the one judged."""
+    if not sessions:
+        raise ValueError("no session to judge")
+    last = sessions[-1]
+    significance = paired_verdict(last["diffs_ms"])
+    lasting = persistence([s["violation"] for s in sessions])
+    if last["rounds"] < MIN_ROUNDS:
+        verdict = "insufficient_data"
+    elif last["violation"]:
+        confirmed = significance["verdict"] == "b_slower" and lasting == "regression"
+        verdict = "regression" if confirmed else "flagged_not_confirmed"
     else:
-        verdict = "suspicious" if persistence == "suspicious" else "no_regression"
-    return {"verdict": verdict, "median_ms": got, "limit_ms": limit, "baseline_median_ms": base_median,
-            "baseline_iqr_ms": base_iqr, "resolution_ms": tick, "floored_at_resolution": tick > base_iqr,
-            "n_baseline": len(baseline), "n_runs": len(runs), "persistence": persistence,
-            "significance": significance}
+        verdict = "suspicious" if lasting == "suspicious" else "no_regression"
+    return {"verdict": verdict, **{k: v for k, v in last.items() if k not in ("violation", "diffs_ms")},
+            "n_sessions": len(sessions), "persistence": lasting, "significance": significance}

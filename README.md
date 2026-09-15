@@ -73,14 +73,16 @@ result = interleave(
 
 ## The verdict
 
-`rola_devtools.verdict.classify(baseline, runs, paired_diffs=...)` calls a candidate's latest run a regression only when
-three gates fire: its median is above the baseline's own median plus three sigmas of the baseline's spread (sigma from
-the interquartile range, never a flat percentage); an exact Wilcoxon signed-rank test over that session's per-round
-differences (candidate minus baseline, alpha 0.01, at least 8 rounds, the floor the alpha itself sets) says it is slower;
-and the violation persists, a trailing run of at least two over the baseline's sessions followed by the candidate's runs.
-Anything less is reported as what it is: `flagged_not_confirmed`, `suspicious`, `insufficient_data` or `no_regression`.
-It takes plain samples; which stored sessions are the baseline is a query over the store (`python -m rola_results
-verdict`).
+Timing is comparable only within the session that interleaved it, so the verdict reads within-session quantities.
+`rola_devtools.verdict.session(candidate, reference)` takes one session's two arms, each its samples by round, and gives
+per round each arm's median, their ratio and their difference. `classify(sessions)` calls the last of a candidate's
+sessions against one reference a regression only when three gates fire: the session's median ratio is above one plus
+three sigmas of its per-round ratios' own spread (sigma from the interquartile range, never below what the stopwatch
+resolves, never a flat percentage); an exact Wilcoxon signed-rank test over its per-round differences (alpha 0.01, at
+least 8 rounds, the floor the alpha itself sets) says the candidate is slower; and the violation persists, a trailing run
+of at least two sessions over their own limits. Anything less is reported as what it is: `flagged_not_confirmed`,
+`suspicious`, `insufficient_data` or `no_regression`. It takes plain samples; which stored sessions and which reference
+are read is a query over the store (`python -m rola_results verdict --reference LABEL`).
 
 ## The central cell registry
 
