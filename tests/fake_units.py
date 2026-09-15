@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 from rola_devtools.measure import Arm, Build, ClockReader, Instrument, Refusal, Registration, Timed
@@ -41,7 +43,9 @@ class Count(Instrument):
     def execute(self, prepared, ws: Path) -> None:
         if self.fail:
             raise RuntimeError(f"unit {self.n} failed on purpose")
-        _ledger(f"count {self.n} {prepared['value']}")
+        held = subprocess.run([sys.executable, "-c", "import os; print(os.environ.get('ROLA_GPU_LOCK_HELD', 'none'))"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        _ledger(f"count {self.n} {prepared['value']} held={held}")
         (ws / "raw.json").write_text(json.dumps(prepared))
 
     def post(self, ws: Path, handle) -> None:

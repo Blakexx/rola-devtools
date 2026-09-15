@@ -43,7 +43,7 @@ from . import host
 #: exact pid match) is what a nested acquire checks -- a marker inherited from an
 #: ancestor process through `exec` still proves "an ancestor already holds this",
 #: which is the case that matters (see module docstring's subprocess case).
-_HELD_MARKER = "ROLA_GPU_LOCK_HELD"
+HELD_MARKER = "ROLA_GPU_LOCK_HELD"
 
 
 def _open_ex(path: str) -> int:
@@ -95,7 +95,7 @@ def gpu_lock(path: str | None = None, *, mode: str = "exclusive"):
     """
     if mode not in ("exclusive", "shared"):
         raise ValueError(f"gpu_lock: mode must be 'exclusive' or 'shared', got {mode!r}")
-    if _HELD_MARKER in os.environ:
+    if HELD_MARKER in os.environ:
         yield
         return
     base = path or machine("host.gpu_lock")
@@ -139,12 +139,12 @@ def gpu_lock(path: str | None = None, *, mode: str = "exclusive"):
                             break
                     if len(held) == 1:
                         time.sleep(0.01)
-        os.environ[_HELD_MARKER] = str(os.getpid())
+        os.environ[HELD_MARKER] = str(os.getpid())
         host.lower_priority("gpu_lock")
         try:
             yield
         finally:
-            os.environ.pop(_HELD_MARKER, None)
+            os.environ.pop(HELD_MARKER, None)
     finally:
         for fd in held:
             fcntl.flock(fd, fcntl.LOCK_UN)

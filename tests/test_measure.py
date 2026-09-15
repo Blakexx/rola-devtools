@@ -154,6 +154,22 @@ class Measure(unittest.TestCase):
         out = self.go(service, select=lambda i, u: u["name"] == "a")
         self.assertEqual((out["fake:build"].status, out["fake:a@t8"].status), ("complete", "ran"))
 
+    def test_a_tool_a_held_unit_starts_sees_the_lock_its_service_holds(self):
+        @contextlib.contextmanager
+        def hold():
+            os.environ["ROLA_GPU_LOCK_HELD"] = "4242"
+            try:
+                yield
+            finally:
+                os.environ.pop("ROLA_GPU_LOCK_HELD")
+
+        service = self.service()
+        service.hold = hold
+        self.go(service, select=lambda i, u: u["name"] == "a")
+        self.assertEqual([line for line in self.ledger() if line.startswith("count")], ["count 1 8 held=4242"])
+        self.go(service, cells=("t16",), select=lambda i, u: u["name"] == "a")
+        self.assertNotIn("held=none", self.ledger()[-1])
+
     def test_one_worker_serves_an_instance_for_the_whole_run(self):
         service = self.service()
         self.go(service, select=lambda i, u: u["name"] in ("a", "no"))

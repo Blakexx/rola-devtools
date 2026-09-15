@@ -26,10 +26,12 @@ BUILDS FIRST. A unit's acceptance and identity may read what its instance builds
 leaves its instance undescribable, and `nodes` refuses it by name.
 
 EXECUTION, under `hold` (the GPU lock, exclusive, and the host's clock lock proven by an instance's `ClockReader` after
-each hold): an instrument's setup and execute; an arm's memory measurement; a session's setups, then a barrier, then
-warmup and interleaved rounds of calls in a fresh random order each rep. What a node prepared is dropped before the hold
-is released; then each post writes its result through its handle. A build runs without the device held (it takes the
-host's compute budget itself), and its instance's worker is restarted after it, since the old build may be loaded.
+each hold; every lock-held marker the hold set is handed to the worker for the held request, so a tool the unit starts
+sees the lock its parent holds and does not wait on it): an instrument's setup and execute; an arm's memory
+measurement; a session's setups, then a barrier, then warmup and interleaved rounds of calls in a fresh random order
+each rep. What a node prepared is dropped before the hold is released; then each post writes its result through its
+handle. A build runs without the device held (it takes the host's compute budget itself), and its instance's worker is
+restarted after it, since the old build may be loaded.
 """
 from __future__ import annotations
 
@@ -49,12 +51,15 @@ from pathlib import Path
 
 from ..build import Executed, Node, Outcome, run
 from ..interleave.driver import WARMUP_FLOOR, iqr
+from ..locks import gpu, host
 
 #: seconds a worker may take to answer one request before its node fails
 REPLY_TIMEOUT_S = 3600.0
 #: the calls a memory node's peak is taken over, after one warm call
 MEMORY_CALLS = 5
 ROLES = ("subject", "reference", "library")
+#: the environment variables that say a lock is held, which a held request carries to its worker
+HELD_MARKERS = (gpu.HELD_MARKER, host.HELD_MARKER)
 
 
 @dataclass(frozen=True)
@@ -369,6 +374,7 @@ class Service:
             if kind == "memory":
                 with self.hold():
                     reply = worker.ask({"op": "memory", "name": unit["name"], "cell": record, "calls": MEMORY_CALLS,
+                                        "env": _held(),
                                         "ws": str(ws)}, node.id)
                 if "refused" in reply:
                     return Executed(refused=self._portable(reply["refused"]), provenance=provenance)
@@ -380,12 +386,13 @@ class Service:
                     self.restart(instance)
                 return self._post(self.worker(instance), unit, ws, node.id, provenance)
             with self.hold():
-                reply = worker.ask({"op": "setup", "id": node.id, "name": unit["name"], "cell": record, "ws": str(ws)},
-                                   node.id)
+                reply = worker.ask({"op": "setup", "id": node.id, "name": unit["name"], "cell": record, "ws": str(ws),
+                                    "env": _held()}, node.id)
                 if "refused" in reply:
                     return Executed(refused=self._portable(reply["refused"]), provenance=provenance)
                 try:
-                    worker.ask({"op": "execute", "id": node.id, "name": unit["name"], "ws": str(ws)}, node.id)
+                    worker.ask({"op": "execute", "id": node.id, "name": unit["name"], "ws": str(ws), "env": _held()},
+                               node.id)
                 finally:
                     worker.ask({"op": "drop", "id": node.id}, node.id)
             return self._post(worker, unit, ws, node.id, provenance)
@@ -413,7 +420,7 @@ class Service:
         with self.hold():
             try:
                 for m in members:
-                    reply = self.worker(m.instance).ask({"op": "setup", "id": m.id, "name": m.unit["name"],
+                    reply = self.worker(m.instance).ask({"op": "setup", "id": m.id, "name": m.unit["name"], "env": _held(),
                                                          "cell": m.cell, "ws": str(ws[m.id])}, m.id)
                     if "refused" in reply:
                         refused[m.id] = self._portable(reply["refused"])
@@ -469,6 +476,11 @@ class Service:
                                 "seed": session.seed, "order": order, "members": rows, "refusals": refused,
                                 "relation": session.relation},
                         wall_s=None, provenance=provenance)
+
+
+def _held() -> dict[str, str]:
+    """The lock-held markers this process carries now: set by the hold a request runs under."""
+    return {marker: os.environ[marker] for marker in HELD_MARKERS if marker in os.environ}
 
 
 def _copy(deps: dict[str, Path], ws: Path) -> None:

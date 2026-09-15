@@ -62,7 +62,7 @@ def budget_slots() -> int:
     return machine("host.budget_slots") or _default_slots()
 
 
-_HELD_MARKER = "ROLA_HOST_BUDGET_HELD"
+HELD_MARKER = "ROLA_HOST_BUDGET_HELD"
 
 
 def _lock_dir() -> Path:
@@ -118,7 +118,7 @@ def acquire(n: int = 1, *, exclusive: bool = False, label: str = "host-budget"):
     `exclusive=False` (default): waits for at least one free slot, then takes
     up to `n` more that are free right now without waiting further.
     """
-    if _HELD_MARKER in os.environ:
+    if HELD_MARKER in os.environ:
         trace(f"reentrant acquire ({label}); an ancestor already holds the budget")
         yield budget_slots() if exclusive else max(1, n)
         return
@@ -170,11 +170,11 @@ def acquire(n: int = 1, *, exclusive: bool = False, label: str = "host-budget"):
                     if fd is not None:
                         held.append(fd)
         trace(f"holding {len(held)}/{total} host-budget slot(s) ({label})")
-        os.environ[_HELD_MARKER] = str(os.getpid())
+        os.environ[HELD_MARKER] = str(os.getpid())
         try:
             yield len(held)
         finally:
-            os.environ.pop(_HELD_MARKER, None)
+            os.environ.pop(HELD_MARKER, None)
     finally:
         for fd in held:
             fcntl.flock(fd, fcntl.LOCK_UN)

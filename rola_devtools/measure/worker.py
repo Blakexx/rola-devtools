@@ -19,7 +19,9 @@ records (`{name, data, params}`), which the worker builds with its own `rola_dev
     {"op": "clock"}                                ->  {"ghz": GHZ | null, "reader": NAME | null}
     {"op": "exit"}                                 ->  (the process exits)
 
-A failure replies {"error": "<the traceback's tail>"} and leaves the worker serving.
+A request may carry `"env"`: variables set in the worker for that request alone (the service hands it the lock-held
+markers of the hold it runs under). A failure replies {"error": "<the traceback's tail>"} and leaves the worker
+serving.
 """
 from __future__ import annotations
 
@@ -137,6 +139,8 @@ def serve(ref: str) -> None:
         op = request["op"]
         if op == "exit":
             return
+        saved = {name: os.environ.get(name) for name in request.get("env", {})}
+        os.environ.update(request.get("env", {}))
         try:
             if registry is None:
                 registry = Registry(ref)
@@ -190,6 +194,9 @@ def serve(ref: str) -> None:
                 raise ValueError(f"unknown op {op!r}")
         except Exception:  # noqa: BLE001 -- the service names the node and fails it
             reply = {"error": traceback.format_exc()[-3000:]}
+        finally:
+            for name, value in saved.items():
+                os.environ.pop(name, None) if value is None else os.environ.__setitem__(name, value)
         replies.write(json.dumps(reply) + "\n")
 
 
