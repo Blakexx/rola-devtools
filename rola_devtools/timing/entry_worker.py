@@ -55,6 +55,10 @@ def _memory(timed, calls: int, before: int) -> dict:
         timed.reset()
     timed.call()
     torch.cuda.synchronize()
+    #: THE LAUNCH'S RESERVATION, NOT THE DRAW'S: the caching allocator keeps every block the entry's build touched
+    #: (a cell drawn in fp64 on the device is gigabytes it never needs again), and a reset alone starts the peak at
+    #: that high-water. Releasing the cache first makes `peak_reserved` what the calls themselves reserve.
+    torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     for _ in range(calls):
         if timed.reset:
