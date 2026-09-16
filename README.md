@@ -73,7 +73,7 @@ as failed inside its own output (a timing entry whose kernel is not built) is it
 
 ```bash
 python -m rola_devtools.build plan declare.py:all
-python -m rola_devtools.build run  declare.py:all --arg cells=flagship-dense,flagship-alt-k4
+python -m rola_devtools.build run  declare.py:all --only 'rola/phases' --skip '*/timeline'   # prune by label
 ```
 
 ## The timing system
