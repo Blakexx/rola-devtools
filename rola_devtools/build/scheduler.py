@@ -3,8 +3,9 @@
     results = build(roots, cache=Cache(root), runtime=Runtime(dir))
 
 Every target the roots reach runs after its dependencies, one at a time. A target's KEY is sha256 over its SEMANTICS --
-its executor and parameters, the digest of the code it declares, the records of the central cells it takes with the
-digest of the code that draws them, and each dependency's key and output digest -- the first 24 hex digits. Labels,
+its executor and parameters, the digest of the code it declares, and each dependency's key and output digest -- a data
+input is a dependency too, so a cell node's record and the digest of the code that drew it reach the key that way -- the
+first 24 hex digits. Labels,
 environments' paths and run ids never enter it, so two checkouts of one tree reach one key; an output's `local` field
 (paths and other machine-local facts a dependent needs) reaches dependents and is left out of the digest.
 
@@ -65,7 +66,7 @@ def order(roots) -> list[Target]:
         if state.get(target.label) == "open":
             raise ValueError(f"a dependency cycle through {target.label}")
         state[target.label] = "open"
-        for dep in target.deps.values():
+        for dep in (*target.deps.values(), *target.inputs):
             visit(dep)
         state[target.label] = "done"
         out.append(target)
@@ -73,13 +74,6 @@ def order(roots) -> list[Target]:
     for root in roots:
         visit(root)
     return out
-
-
-def _draw_digest() -> str:
-    from .. import cells
-
-    root = cells.FILES[0].parent
-    return identity.files(root, sorted(p.name for p in root.iterdir() if p.suffix in (".py", ".json")))
 
 
 def _code(target: Target, cwd: str) -> str | None:
@@ -103,11 +97,10 @@ def run_id() -> str:
     return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + secrets.token_hex(3)
 
 
-def build(roots, *, cache: Cache, runtime: Runtime, registry=None, dry: bool = False, force: bool = False,
+def build(roots, *, cache: Cache, runtime: Runtime, dry: bool = False, force: bool = False,
           log: Callable[[str], None] = print, run: str | None = None) -> list[Result]:
     run = run or run_id()
     results: dict[str, Result] = {}
-    draw: list[str] = []
     stopped = False
 
     def done(result: Result) -> Result:
@@ -119,6 +112,8 @@ def build(roots, *, cache: Cache, runtime: Runtime, registry=None, dry: bool = F
 
     for target in order(roots):
         deps = {role: results[dep.label] for role, dep in target.deps.items()}
+        inputs = [results[dep.label] for dep in target.inputs]
+        deps.update({f"input {i}": result for i, result in enumerate(inputs)})
         if target.group:
             ok = all(d.status in OK for d in deps.values())
             pending = any(d.status == "pending" for d in deps.values())
@@ -137,15 +132,7 @@ def build(roots, *, cache: Cache, runtime: Runtime, registry=None, dry: bool = F
             done(Result(target.label, "blocked", detail=f"no usable result for {', '.join(unusable)}"))
             continue
         env = runtime.env(target)
-        if target.inputs and registry is None:
-            from ..cells import central
-
-            registry = central()
-        if target.inputs and not draw:
-            draw.append(_draw_digest())
-        records = [registry.cell(name) for name in target.inputs]
         semantics = {"executor": target.executor, "params": target.params, "code": _code(target, env.cwd),
-                     "inputs": records, "draw": draw[0] if records else None,
                      "deps": {role: {"key": d.key, "output": _json_digest(d.output)} for role, d in sorted(deps.items())
                               if d.status in OK}}
         k = key(semantics)
@@ -159,9 +146,9 @@ def build(roots, *, cache: Cache, runtime: Runtime, registry=None, dry: bool = F
             continue
         workspace = cache.workspace(run, target.label)
         context = {"label": target.label, "run": run, "workspace": str(workspace), "params": target.params,
-                   "inputs": records,
+                   "inputs": [result.output for result in inputs],
                    "deps": {role: {"label": d.label, "status": d.status, "key": d.key, "output": d.output, "dir": d.dir}
-                            for role, d in deps.items()}}
+                            for role, d in deps.items() if not role.startswith("input ")}}
         (workspace / "semantics.json").write_text(json.dumps(semantics, indent=1, sort_keys=True))
         started = time.time()
         try:

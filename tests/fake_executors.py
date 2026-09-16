@@ -10,8 +10,20 @@ LEDGER = "FAKE_EXECUTORS_LEDGER"
 
 
 def _ledger(line: str) -> None:
-    with open(os.environ[LEDGER], "a") as ledger:
-        ledger.write(line + "\n")
+    """Appends where a test asked for a ledger, and nowhere when it did not (the timing tests read outputs, not order)."""
+    path = os.environ.get(LEDGER)
+    if path:
+        with open(path, "a") as ledger:
+            ledger.write(line + "\n")
+
+
+def record(ctx) -> dict:
+    """A CELL NODE: its record, as `rola_devtools.cells.executors.record` produces one -- the provider that draws it,
+    its parameters and the digest of the code that draws it, so a target taking it keys on all three."""
+    _ledger(f"record {ctx.label}")
+    name = ctx.params["cell"]
+    return {"name": name, "data": "fake_provider:tokens", "params": {"tokens": int(name.removeprefix("t"))},
+            "draw": os.environ.get("FAKE_DRAW", "draw-0")}
 
 
 def echo(ctx) -> dict:

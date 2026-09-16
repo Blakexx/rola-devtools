@@ -4,8 +4,9 @@
         ...
 
 `workspace` is the target's own directory for this run: raw files go there, and a cached target's workspace is kept
-with its output. `inputs` are the central cells' records the target takes; `deps` maps each role to what that
-dependency produced (its output, its directory, its key and status). `run` is the build's run id.
+with its output. `inputs` are the outputs of the targets the declaration named as this one's data inputs, in order (a
+cell node's record, say); `deps` maps each role to what that dependency produced (its output, its directory, its key and
+status). `run` is the build's run id.
 """
 from __future__ import annotations
 

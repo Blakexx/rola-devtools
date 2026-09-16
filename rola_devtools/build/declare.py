@@ -9,7 +9,8 @@ load the same file from several checkouts. It defines functions that take a `Gra
         return {"binary": binary, "sass": sass, "all": g.group("all", [binary, sass])}
 
 A TARGET is a job: an executor (`module:function`) that runs in an environment (`Env`: a python, a directory, variables;
-None is the build system's own), the targets it reads by ROLE, the central cells it takes as INPUTS, its parameters,
+None is the build system's own), the targets it reads by ROLE, the targets whose outputs are its DATA INPUTS (in order,
+each keyed like a dependency; a cell node is one), its parameters,
 the resources it HOLDS while it runs (`{"gpu": "all"}`, `{"host_cpu": 8}`), whether its result is cached (`cache`),
 whether it runs after a failure (`always_run`), a VERIFY function run on a cache hit (a build whose binary may have
 left the machine), and the CODE its result depends on (files of its environment's directory, hashed by the build
@@ -41,7 +42,7 @@ class Target:
     executor: str | None
     env: Env | None = None
     deps: dict = field(default_factory=dict)
-    inputs: tuple[str, ...] = ()
+    inputs: tuple = ()
     params: dict = field(default_factory=dict)
     holds: dict = field(default_factory=dict)
     cache: bool = True
@@ -63,12 +64,19 @@ class Graph:
     def scoped(self, name: str) -> Graph:
         return Graph(f"{self.scope}{name}/", self.targets)
 
+    def unscoped(self) -> Graph:
+        """The same targets under no scope: where a declaration puts what the WHOLE build shares (a cell node), so two
+        checkouts' declarations reach one node instead of one apiece."""
+        return Graph("", self.targets)
+
     def _add(self, target: Target) -> Target:
         if target.label in self.targets:
             raise ValueError(f"{target.label} is declared twice")
-        for role, dep in target.deps.items():
+        named = {**{f"role {role}": dep for role, dep in target.deps.items()},
+                 **{f"input {i}": dep for i, dep in enumerate(target.inputs)}}
+        for what, dep in named.items():
             if not isinstance(dep, Target) or self.targets.get(dep.label) is not dep:
-                raise ValueError(f"{target.label} reads {role} from a target this graph did not declare")
+                raise ValueError(f"{target.label} reads {what} from a target this graph did not declare")
         self.targets[target.label] = target
         return target
 

@@ -21,7 +21,8 @@ from rola_devtools.cells import Registry
 HERE = Path(__file__).resolve().parent
 DECLARE = '''
 def declare(g, env, n):
-    first = g.node("first", executor="fake_executors:echo", env=env, params={"n": n}, inputs=["t8"])
+    first = g.node("first", executor="fake_executors:echo", env=env, params={"n": n},
+                   inputs=[g.node("cells/t8", executor="fake_executors:record", params={"cell": "t8"})])
     second = g.node("second", executor="fake_executors:echo", env=env, deps={"first": first})
     return {"first": first, "second": second, "all": g.group("all", [first, second])}
 '''
@@ -57,7 +58,7 @@ class Declared(unittest.TestCase):
     def go(self, roots, **kw):
         with Runtime(HERE) as runtime:
             return {r.label: r for r in build(roots, cache=Cache(self.root / "cache"), runtime=runtime,
-                                              registry=self.registry, log=lambda _l: None, **kw)}
+                                              log=lambda _l: None, **kw)}
 
     def ledger(self):
         return (self.root / "ledger").read_text().splitlines()

@@ -6,7 +6,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | Module | What it is |
 |---|---|
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
-| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them |
+| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them; each cell declarable as a build NODE whose output is its record |
 | `rola_devtools.build` | the declared build system: targets declared by composable functions in files, keyed by what they read, cached or run in dependency order, holding the machine's resources, each in its own environment's worker |
 | `rola_devtools.timing` | the timing system, as targets: a server of entry workers, registrations of timed callables on cells, interleaved clock-locked sessions, memory passes, null gates |
 | `rola_devtools.store` | the store target: a result written through rola-results as a run-stamped sample of its source's record |
@@ -61,8 +61,9 @@ def root(g, target):
     return {"all": g.group("all", [tip["binary"], *tip["instruments"].values()])}
 ```
 
-A target's KEY is sha256 over its executor, parameters, declared code digest, its cells' records with the digest of the
-code that draws them, and each dependency's key and output digest; labels, paths and run ids never enter it. The
+A target's KEY is sha256 over its executor, parameters, declared code digest, and each dependency's key and output
+digest -- a DATA INPUT is a dependency too, so a cell node's record and the digest of the code that drew it reach the key
+that way; labels, paths and run ids never enter it. The
 scheduler takes the targets in dependency order: a cached target whose key the build cache holds (`host.build_cache`,
 wipeable) is skipped, the rest run with their resources held -- `{"gpu": "all"}`, `{"gpu": 1}`, `{"host_cpu": 8}`,
 `{"clock": 1}`, counting semaphores over the machine's own locks, so processes outside the build are excluded too. An

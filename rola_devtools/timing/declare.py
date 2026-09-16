@@ -17,9 +17,11 @@ def stop_timing_server(g, name: str = "timing-server-stop", *, server, after):
 
 def register_timing(g, name: str, *, server, env, executor: str, cells, params: dict | None = None, deps: dict | None = None,
                     code: dict | None = None):
-    """One target registering `executor` (in `env`) on every cell of `cells` as a timing entry."""
-    return g.node(name, executor=EXECUTORS + "register", env=env, deps={"server": server, **(deps or {})}, inputs=cells,
-                  params={"executor": executor, "params": params or {}}, code=code, cache=False)
+    """One target registering `executor` (in `env`) on every cell TARGET of `cells` as a timing entry: the caller
+    declares the cell nodes (`rola_devtools.cells.declare.cells`) and this takes their records as data inputs, so the
+    timing system knows a cell only as the record a node it depends on produced."""
+    return g.node(name, executor=EXECUTORS + "register", env=env, deps={"server": server, **(deps or {})},
+                  inputs=cells, params={"executor": executor, "params": params or {}}, code=code, cache=False)
 
 
 def register_clock_reader(g, name: str, *, server, env, executor: str, deps: dict | None = None, code: dict | None = None):

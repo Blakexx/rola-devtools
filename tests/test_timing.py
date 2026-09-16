@@ -53,13 +53,18 @@ class Timing(unittest.TestCase):
         config.reload()
         self._tmp.cleanup()
 
+    def cells(self, g, names):
+        """The cell nodes for `names`, declared once a graph: a cell is a node whose output is its record."""
+        return [g.targets.get(f"cells/{name}") or g.node(f"cells/{name}", executor="fake_executors:record",
+                                                         params={"cell": name}) for name in names]
+
     def env(self, label):
         return Env(label, sys.executable, str(HERE), {"PYTHONPATH": os.pathsep.join([str(HERE.parent), str(HERE)])})
 
     def go(self, roots):
         with Runtime(HERE) as runtime:
             return {r.label: r for r in build(roots, cache=Cache(self.root / "cache"), runtime=runtime,
-                                              registry=self.registry, log=lambda _l: None)}
+                                              log=lambda _l: None)}
 
     def session(self, result):
         return json.loads((Path(result.dir) / "session.json").read_text())
@@ -67,8 +72,9 @@ class Timing(unittest.TestCase):
     def graph(self, registrations, **measure):
         g = Graph()
         server = start_timing_server(g)
-        entries = [register_timing(g, name, server=server, env=self.env(env), executor=f"fake_entries:{ex}", cells=cells,
-                                   params=params) for name, env, ex, cells, params in registrations]
+        entries = [register_timing(g, name, server=server, env=self.env(env), executor=f"fake_entries:{ex}",
+                                   cells=self.cells(g, cells), params=params)
+                   for name, env, ex, cells, params in registrations]
         clock = register_clock_reader(g, "clock", server=server, env=self.env("tip"), executor="fake_entries:clock")
         session = measure_timing(g, "session", server=server, entries=entries, clock=clock, rounds=2, reps=3, **measure)
         stop = stop_timing_server(g, server=server, after=[session])
@@ -120,9 +126,9 @@ class Timing(unittest.TestCase):
         g = Graph()
         server = start_timing_server(g)
         reg = register_timing(g, "tip/fast", server=server, env=self.env("tip"), executor="fake_entries:fixed",
-                              cells=["t8"], params={"ms": 1.0})
+                              cells=self.cells(g, ["t8"]), params={"ms": 1.0})
         bad = register_timing(g, "tip/unbuilt", server=server, env=self.env("tip"), executor="fake_entries:unbuilt",
-                              cells=["t8"])
+                              cells=self.cells(g, ["t8"]))
         memory = measure_memory(g, "memory", server=server, entries=[reg, bad])
         stop = stop_timing_server(g, server=server, after=[memory])
         out = self.go([stop])
@@ -143,7 +149,8 @@ class Timing(unittest.TestCase):
         clock = register_clock_reader(g, "clock", server=server, env=self.env("tip"), executor="fake_entries:clock")
         gates = [measure_null_gate(g, f"null/{name}", server=server, clock=clock, rounds=2, reps=3,
                                    entry=register_timing(g, name, server=server, env=self.env("tip"),
-                                                         executor=f"fake_entries:{ex}", cells=["t8"], params=params))
+                                                         executor=f"fake_entries:{ex}", cells=self.cells(g, ["t8"]),
+                                                         params=params))
                  for name, ex, params in (("fast", "fixed", {"ms": 1.0}), ("biased", "biased", {}))]
         out = self.go([stop_timing_server(g, server=server, after=gates)])
         fair, biased = out["null/fast"].output["cells"]["t8"], out["null/biased"].output["cells"]["t8"]
