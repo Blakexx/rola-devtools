@@ -175,6 +175,20 @@ class Timing(unittest.TestCase):
         self.assertEqual(len({m["built"]["pid"] for m in doc["members"]}), 2)
         self.assertEqual(doc["null"]["t8"], biased)
 
+    def test_a_stored_result_of_a_cached_source_names_the_checkout_it_ran_in(self):
+        """A cached source carries no `local` facts, so where it ran reaches the store as a SETTING taken from its
+        environment at declaration -- and the sample's provenance names that checkout."""
+        from rola_results import Store
+
+        from rola_devtools.store import store
+
+        g = Graph()
+        src = g.node("inst", executor="fake_executors:echo", env=self.env("tip"))
+        kept = store(g, "store", source=src, location="rola/inst", root=str(self.root / "records"))
+        self.go([kept])
+        (record,) = Store("rola/inst", self.root / "records").records()
+        self.assertEqual(list(record["samples"][-1]["provenance"]["checkouts"]), ["tip"])
+
     def test_a_stored_session_appends_a_run_stamped_sample_to_its_configurations_record(self):
         from rola_devtools.store import store
 
