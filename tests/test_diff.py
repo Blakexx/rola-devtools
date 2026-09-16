@@ -167,6 +167,24 @@ class Node(unittest.TestCase):
         self.assertEqual(out["bound"].status, "failed")
         self.assertIn("which is outside it", out["bound"].detail)
 
+    def test_two_sides_of_one_library_are_vacuous_only_when_they_run_the_same_function(self):
+        """A kernel against its own fp64 reference shares a library by design; the same executor twice from one file
+        compared a tree with itself."""
+        g = Graph()
+        nodes = cell_nodes(g, ["corner-anti"])
+        kw = {"env": self.env(), "cells": nodes, "holds": {}, "binds": "fake_sides"}
+        left = side(g, "kernel", executor="fake_sides:flat", **kw)
+        right = side(g, "reference", executor="fake_sides:sparse", **kw)
+        out = self.go([diff(g, "kvo", left=left, right=right, strategy="bit-identical", on_difference="record")])
+        self.assertEqual(out["kvo"].status, "ran")  #: compared, and the functions differ, which is honest
+        g2 = Graph()
+        nodes2 = cell_nodes(g2, ["corner-anti"])
+        twice = [side(g2, n, executor="fake_sides:flat", env=self.env(), cells=nodes2, holds={}, binds="fake_sides")
+                 for n in ("a", "b")]
+        vacuous = self.go([diff(g2, "self", left=twice[0], right=twice[1], strategy="bit-identical")])
+        self.assertEqual(vacuous["self"].status, "failed")
+        self.assertIn("ran one tree against itself", vacuous["self"].detail)
+
     def test_a_comparison_that_compared_less_than_it_declared_is_a_refusal_not_a_pass(self):
         """P7, THE COUNT: a gate that cannot run says so rather than reporting a verdict over whatever survived."""
         g = Graph()

@@ -48,7 +48,7 @@ def produce(ctx) -> dict:
     if slots:
         torch.set_num_threads(max(1, int(slots)))
     binds = ctx.params.get("binds")
-    binding = _binding(binds, str(Path.cwd())) if binds else None
+    binding = {**_binding(binds, str(Path.cwd())), "executor": ctx.params["executor"]} if binds else None
     subject = _resolve(ctx.params["executor"])
     params = ctx.params["params"]
     out = {}
@@ -83,11 +83,14 @@ def compare(ctx) -> dict:
     strategy, params = ctx.params["strategy"], ctx.params["params"]
     expect, on_difference = ctx.params["expect"], ctx.params["on_difference"]
 
-    #: TWO SIDES THAT RESOLVED THE SAME LIBRARY COMPARED NOTHING, whatever they agreed about
+    #: THE SAME FUNCTION FROM THE SAME LIBRARY COMPARED NOTHING, whatever it agreed with itself about. Two DIFFERENT
+    #: functions in one checkout -- a kernel against its fp64 reference -- share a library by design.
     bindings = (left.output.get("binding"), right.output.get("binding"))
-    if all(bindings) and bindings[0]["file"] == bindings[1]["file"]:
-        raise AssertionError(f"both sides imported {bindings[0]['module']} from {bindings[0]['file']}: this "
-                             "comparison ran one tree against itself and its verdict means nothing")
+    same_file = all(bindings) and bindings[0]["file"] == bindings[1]["file"]
+    if same_file and bindings[0].get("executor") == bindings[1].get("executor"):
+        raise AssertionError(f"both sides ran {bindings[0].get('executor')} with {bindings[0]['module']} from "
+                             f"{bindings[0]['file']}: this comparison ran one tree against itself and its verdict "
+                             "means nothing")
 
     cells, differing, unusable = {}, [], []
     for name in sorted(set(left.output["cells"]) | set(right.output["cells"])):
@@ -104,7 +107,9 @@ def compare(ctx) -> dict:
             unusable.append(name)
             continue
         a, b = _load(left, name), _load(right, name)
-        names = sorted(set(a) | set(b))
+        #: a quantity named as another's ENVELOPE is a bound the reference side supplies, never a thing compared
+        envelopes = {params.get("envelope_from")} | {q.get("envelope_from") for q in params.get("per_quantity", {}).values()}
+        names = sorted((set(a) | set(b)) - envelopes)
         verdicts = {}
         for quantity in names:
             if quantity not in a or quantity not in b:
