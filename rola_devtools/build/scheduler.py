@@ -146,6 +146,7 @@ def build(roots, *, cache: Cache, runtime: Runtime, dry: bool = False, force: bo
             continue
         workspace = cache.workspace(run, target.label)
         context = {"label": target.label, "run": run, "workspace": str(workspace), "params": target.params,
+                   "settings": target.settings,
                    "inputs": [result.output for result in inputs],
                    "deps": {role: {"label": d.label, "status": d.status, "key": d.key, "output": d.output, "dir": d.dir}
                             for role, d in deps.items() if not role.startswith("input ")}}

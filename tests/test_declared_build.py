@@ -83,6 +83,39 @@ class Declared(unittest.TestCase):
         self.assertEqual({r.status for r in out.values()}, {"cached"})
         self.assertEqual(len([line for line in self.ledger() if line.startswith("echo")]), 2)
 
+    def test_a_setting_reaches_the_executor_and_stays_out_of_the_key(self):
+        """WHERE a result is filed is not WHAT it is: two targets that differ only in a setting are one job, and the
+        second is a cache hit at the first's key -- which is what lets the store file into any results checkout."""
+        one = Graph().node("s", executor="fake_executors:echo", env=self.env(), params={"n": 1},
+                           settings={"root": "/one/records"})
+        first = self.go([one])
+        two = Graph().node("s", executor="fake_executors:echo", env=self.env(), params={"n": 1},
+                           settings={"root": "/two/records"})
+        again = self.go([two])
+        self.assertEqual(first["s"].output["settings"], {"root": "/one/records"})
+        self.assertEqual((again["s"].key, again["s"].status), (first["s"].key, "cached"))
+
+    def test_the_cache_sweeps_old_runs_and_evicts_the_least_recently_read_keys(self):
+        """A cache that only grows is a disk that only shrinks. Runs go by age, keys by LAST READ -- and a key a build
+        just hit is the one that survives, which is the whole difference between an LRU and a coin toss."""
+        from rola_devtools.build.cache import Cache
+
+        cache = Cache(self.root / "swept")
+        for run in ("r1", "r2", "r3"):
+            (cache.workspace(run, "t") / "raw.txt").write_text("x" * 1000)
+        for key in ("old", "fresh"):
+            work = cache.workspace("w", key)
+            (work / "raw.txt").write_text("y" * 4000)
+            cache.put(key, {"k": key}, {"out": key}, work)
+        os.utime(cache.entry("old"), (1, 1))
+        self.assertIsNotNone(cache.get("fresh"))  #: a hit is a use
+
+        swept = cache.sweep(keep_runs=1, max_key_bytes=6000)
+        self.assertEqual(sorted(d.name for d in (cache.root / "runs").glob("*")), ["w"])
+        self.assertEqual([d.name for d in (cache.root / "keys").glob("*")], ["fresh"])
+        self.assertEqual((swept["runs_dropped"], swept["keys_evicted"]), (3, 1))
+        self.assertIsNone(cache.get("old"))
+
     def test_a_build_failure_stops_the_build_and_always_run_still_runs(self):
         g = Graph()
         bad = g.node("bad", executor="fake_executors:boom", env=self.env())

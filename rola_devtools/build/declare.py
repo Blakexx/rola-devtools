@@ -10,7 +10,10 @@ load the same file from several checkouts. It defines functions that take a `Gra
 
 A TARGET is a job: an executor (`module:function`) that runs in an environment (`Env`: a python, a directory, variables;
 None is the build system's own), the targets it reads by ROLE, the targets whose outputs are its DATA INPUTS (in order,
-each keyed like a dependency; a cell node is one), its parameters,
+each keyed like a dependency; a cell node is one), its parameters, its SETTINGS
+(given to the executor and NEVER hashed -- WHERE a result is filed, never WHAT it is: the store's backend directory is
+the one that exists, because the same record written to two checkouts of the results repository is the same record and
+keying the path would make it two),
 the resources it HOLDS while it runs (`{"gpu": "all"}`, `{"host_cpu": 8}`), whether its result is cached (`cache`),
 whether it runs after a failure (`always_run`), a VERIFY function run on a cache hit (a build whose binary may have
 left the machine), and the CODE its result depends on (files of its environment's directory, hashed by the build
@@ -44,6 +47,7 @@ class Target:
     deps: dict = field(default_factory=dict)
     inputs: tuple = ()
     params: dict = field(default_factory=dict)
+    settings: dict = field(default_factory=dict)
     holds: dict = field(default_factory=dict)
     cache: bool = True
     always_run: bool = False
@@ -81,7 +85,8 @@ class Graph:
         return target
 
     def node(self, name: str, *, executor: str, env: Env | None = None, deps: dict | None = None, inputs=(),
-             params: dict | None = None, holds: dict | None = None, cache: bool = True, always_run: bool = False,
+             params: dict | None = None, settings: dict | None = None, holds: dict | None = None,
+             cache: bool = True, always_run: bool = False,
              verify: str | None = None, code: dict | None = None) -> Target:
         if ":" not in executor:
             raise ValueError(f"{name}: an executor is module:function, got {executor!r}")
@@ -91,7 +96,7 @@ class Graph:
             if claim != "all" and not (isinstance(claim, int) and claim > 0):
                 raise ValueError(f"{name}: holds {resource} as {claim!r}; a claim is a positive count or 'all'")
         return self._add(Target(f"{self.scope}{name}", executor, env, dict(deps or {}), tuple(inputs), dict(params or {}),
-                                dict(holds or {}), cache, always_run, verify, code))
+                                dict(settings or {}), dict(holds or {}), cache, always_run, verify, code))
 
     def group(self, name: str, members) -> Target:
         return self._add(Target(f"{self.scope}{name}", None, deps={f"m{i}": m for i, m in enumerate(members)},

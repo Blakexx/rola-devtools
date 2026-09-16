@@ -3,10 +3,11 @@
     def compile_kernel(ctx: Context) -> dict:      # the JSON output dependents read and keys hash
         ...
 
-`workspace` is the target's own directory for this run: raw files go there, and a cached target's workspace is kept
-with its output. `inputs` are the outputs of the targets the declaration named as this one's data inputs, in order (a
-cell node's record, say); `deps` maps each role to what that dependency produced (its output, its directory, its key and
-status). `run` is the build's run id.
+`params` are the target's parameters and they are IN ITS KEY; `settings` are not, and hold what does not change
+what the result IS -- the directory a store files into. `workspace` is the target's own directory for this run: raw
+files go there, and a cached target's workspace is kept with its output. `inputs` are the outputs of the targets the
+declaration named as this one's data inputs, in order (a cell node's record, say); `deps` maps each role to what that
+dependency produced (its output, its directory, its key and status). `run` is the build's run id.
 """
 from __future__ import annotations
 
@@ -29,13 +30,14 @@ class Context:
     run: str
     workspace: Path
     params: dict
+    settings: dict
     inputs: tuple[dict, ...]
     deps: dict[str, Dep]
 
     @classmethod
     def from_json(cls, doc: dict) -> Context:
-        return cls(doc["label"], doc["run"], Path(doc["workspace"]), doc["params"], tuple(doc["inputs"]),
-                   {role: Dep(**dep) for role, dep in doc["deps"].items()})
+        return cls(doc["label"], doc["run"], Path(doc["workspace"]), doc["params"], doc.get("settings", {}),
+                   tuple(doc["inputs"]), {role: Dep(**dep) for role, dep in doc["deps"].items()})
 
 
 __all__ = ["Context", "Dep"]

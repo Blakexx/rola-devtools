@@ -16,10 +16,12 @@ from pathlib import Path
 
 
 def store(g, name: str, *, source, location: str, root: str | None = None, cache: bool = False):
-    """`root` is the rola-results backend directory; None is its own records. `cache`: skip storing a result already
-    stored (for an analysis the build caches, whose key the store's key follows); a measurement stores every run."""
+    """`root` is the rola-results backend directory; None is its own records -- a SETTING, not a parameter, because
+    the same record written to two checkouts of the results repository is the same record and keying the path would
+    make it two. `cache`: skip storing a result already stored (for an analysis the build caches, whose key the store's
+    key follows); a measurement stores every run."""
     return g.node(name, executor="rola_devtools.store:put", deps={"source": source},
-                  params={"location": location, "root": root}, cache=cache)
+                  params={"location": location}, settings={"root": root}, cache=cache)
 
 
 def put(ctx) -> dict:
@@ -30,7 +32,7 @@ def put(ctx) -> dict:
     output = {k: v for k, v in source.output.items() if k != "local"}
     envs = source.output.get("local", {}).get("envs", {})
     provenance = {"run": ctx.run, "checkouts": {owner: checkout(env["cwd"]) for owner, env in sorted(envs.items())}}
-    store = Store(ctx.params["location"], ctx.params["root"] or ROOT)
+    store = Store(ctx.params["location"], ctx.settings["root"] or ROOT)
     if "file" in output:
         copy = ctx.workspace / output["file"]
         shutil.copyfile(Path(source.dir) / output["file"], copy)

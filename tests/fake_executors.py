@@ -30,7 +30,7 @@ def echo(ctx) -> dict:
     _ledger(f"echo {ctx.label}")
     print(f"a log line from {ctx.label}")
     (ctx.workspace / "raw.txt").write_text(ctx.label)
-    return {"params": ctx.params, "inputs": [c["name"] for c in ctx.inputs],
+    return {"params": ctx.params, "settings": ctx.settings, "inputs": [c["name"] for c in ctx.inputs],
             "deps": {role: dep.output for role, dep in ctx.deps.items()},
             "held": os.environ.get("ROLA_GPU_LOCK_HELD")}
 

@@ -6,7 +6,8 @@
 FILE defines `root(g, **args)`, which declares on the graph `g` (loading and calling other declaration files as it
 likes) and returns its public targets by name; TARGET is one of those names. `--arg name=value` is handed to `root` as a
 string. The build system runs in this interpreter, in FILE's directory; targets run in the environments they declare.
-The cache is the dev config's `host.build_cache` unless `--cache` names another.
+The cache is the dev config's `host.build_cache` unless `--cache` names another, and a `run` sweeps it first:
+the oldest runs' workspaces, then the least recently read keyed entries over the budget.
 """
 from __future__ import annotations
 
@@ -43,8 +44,15 @@ def main() -> int:
     public = declared["root"](Graph(), **args)
     if name not in public:
         raise SystemExit(f"{file}: root() declares no target {name!r}; it declares {sorted(public)}")
+    cache = Cache(a.cache or machine("host.build_cache"))
+    if a.cmd == "run":
+        #: BEFORE this run's own directory exists, so a sweep never touches the run it is sweeping for
+        swept = cache.sweep()
+        if swept["runs_dropped"] or swept["keys_evicted"]:
+            print(f"cache: swept {swept['runs_dropped']} run(s) and {swept['keys_evicted']} key(s), "
+                  f"{swept['freed_bytes'] / 1024**2:.0f} MiB", flush=True)
     with Runtime(Path(file).resolve().parent) as runtime:
-        results = build([public[name]], cache=Cache(a.cache or machine("host.build_cache")), runtime=runtime,
+        results = build([public[name]], cache=cache, runtime=runtime,
                         dry=a.cmd == "plan", force=a.force, log=lambda line: print(line, flush=True))
     print(f"build: {summary(results)}")
     return 1 if any(r.status == "failed" for r in results) else 0
