@@ -26,3 +26,10 @@ def sparse(record, *, drop=None, **_kw) -> dict:
 
 def refuses(record, **_kw) -> dict:
     raise RuntimeError(f"this side does not support {record['name']}")
+
+
+def refuses_one(record, **kw) -> dict:
+    """Refuses `corner-anti` the way a binary refuses an arm it does not carry, and produces every other cell."""
+    if record["name"] == "corner-anti":
+        raise RuntimeError("this build carries no arm for corner-anti")
+    return flat(record, **kw)

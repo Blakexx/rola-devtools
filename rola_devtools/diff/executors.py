@@ -92,10 +92,17 @@ def compare(ctx) -> dict:
                              f"{bindings[0]['file']}: this comparison ran one tree against itself and its verdict "
                              "means nothing")
 
-    cells, differing, unusable = {}, [], []
+    cells, differing, unusable, refused = {}, [], [], []
     for name in sorted(set(left.output["cells"]) | set(right.output["cells"])):
         sides = {"left": left.output["cells"].get(name), "right": right.output["cells"].get(name)}
         missing = [s for s, state in sides.items() if state is None or state["status"] != "ok"]
+        if len(missing) == 2 and all(sides[s] is not None for s in missing):
+            #: BOTH SIDES REFUSED THE CELL: two binaries that carry no arm for it agree about it, and the diff has
+            #: nothing to say about a cell neither ran -- it is listed, not counted, and `minimum` still guards a
+            #: comparison that refused its way to vacuity
+            cells[name] = {"status": "refused", "left": sides["left"].get("detail"), "right": sides["right"].get("detail")}
+            refused.append(name)
+            continue
         if missing:
             detail = {s: (sides[s] or {}).get("detail", "no such cell on this side") for s in missing}
             cells[name] = {"status": "unusable", "produced_by": [s for s in sides if s not in missing], **detail}
@@ -132,7 +139,7 @@ def compare(ctx) -> dict:
     if quantities < ctx.params.get("minimum", 1):
         held = False
     out = {"strategy": strategy, "expect": expect, "cells": cells, "differing": differing, "unusable": unusable,
-           "compared": len(cells) - len(unusable), "quantities": quantities,
+           "refused": refused, "compared": len(cells) - len(unusable) - len(refused), "quantities": quantities,
            "minimum": ctx.params.get("minimum", 1), "held": held,
            "bindings": {"left": bindings[0], "right": bindings[1]}}
     if not held and on_difference == "fail":
