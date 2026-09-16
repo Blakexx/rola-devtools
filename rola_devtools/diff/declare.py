@@ -23,9 +23,12 @@ def side(g, name: str, *, env, executor: str, cells, params: dict | None = None,
     cell's record -- so a side that has already run for these cells and this code is not run again, and the two sides
     of a diff between one checkout and itself are one job.
     """
+    #: A SIDE HOLDS THE WHOLE HOST BUDGET UNLESS TOLD OTHERWISE. A reference in fp64 over a cell is CPU work that
+    #: takes every core it is given, and the budget is cores minus the headroom that keeps the shell alive; a side
+    #: that held nothing took every core and froze the host (2026-09-15). A kernel side declares `{"gpu": "all"}`.
     return g.node(name, executor=EXECUTORS + "produce", env=env, deps=deps or {}, inputs=cells,
                   params={"executor": executor, "params": params or {}, "binds": binds}, code=code,
-                  holds=holds if holds is not None else {"gpu": "all"})
+                  holds=holds if holds is not None else {"host_cpu": "all"})
 
 
 def diff(g, name: str, *, left, right, strategy: str, params: dict | None = None, expect: str = "same",

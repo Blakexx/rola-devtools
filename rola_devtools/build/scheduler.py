@@ -25,6 +25,7 @@ For each target, in order:
 """
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import secrets
@@ -74,6 +75,28 @@ def order(roots) -> list[Target]:
     for root in roots:
         visit(root)
     return out
+
+
+def select(roots, *, only=(), skip=()) -> list[Target]:
+    """THE ROOTS A BUILD RUNS, pruned by label pattern -- the build system's one selection mechanism, and it knows
+    nothing of what a label means. `only`: the reachable targets matching any pattern become the roots, so what they
+    need comes along and nothing else does. `skip`: a matching target is dropped, and so is everything that needs it,
+    because a target cannot run on a dependency the build was told not to make. Patterns are `fnmatch` globs."""
+    reachable = order(roots)
+    if only:
+        chosen = [t for t in reachable if any(fnmatch.fnmatchcase(t.label, p) for p in only)]
+        if not chosen:
+            raise ValueError(f"no target of {[r.label for r in roots]} matches {list(only)}")
+        reachable = order(chosen)
+    if not skip:
+        return reachable if only else list(roots)
+    dropped = {t.label for t in reachable if any(fnmatch.fnmatchcase(t.label, p) for p in skip)}
+    for t in reachable:  # dependency order: a dropped dependency drops its dependents in one pass
+        if t.label not in dropped and any(d.label in dropped for d in (*t.deps.values(), *t.inputs)):
+            dropped.add(t.label)
+    kept = [t for t in reachable if t.label not in dropped]
+    needed = {d.label for t in kept for d in (*t.deps.values(), *t.inputs)}
+    return [t for t in kept if t.label not in needed]
 
 
 def _code(target: Target, cwd: str) -> str | None:

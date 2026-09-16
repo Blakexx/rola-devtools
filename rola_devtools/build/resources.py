@@ -37,8 +37,13 @@ def _host_cpu(claim) -> Iterator[None]:
     total = host.budget_slots()
     if claim != "all" and claim > total:
         raise ValueError(f"host_cpu holds {claim} of {total} slots")
-    with host.acquire(total if claim == "all" else claim, exclusive=claim == "all", label="build"):
-        yield
+    with host.acquire(total if claim == "all" else claim, exclusive=claim == "all", label="build") as held:
+        #: HOW MANY SLOTS THE TARGET HOLDS, for a worker that sizes its own threads by them
+        os.environ[SLOTS_MARKER] = str(held)
+        try:
+            yield
+        finally:
+            os.environ.pop(SLOTS_MARKER, None)
 
 
 @contextlib.contextmanager
@@ -50,8 +55,9 @@ def _clock(claim) -> Iterator[None]:
 
 
 PROVIDERS = {"gpu": _gpu, "host_cpu": _host_cpu, "clock": _clock}
+SLOTS_MARKER = "ROLA_HOST_BUDGET_SLOTS"
 #: the environment variables a held lock sets, handed to the worker that runs the holding target
-MARKERS = (gpu.HELD_MARKER, host.HELD_MARKER)
+MARKERS = (gpu.HELD_MARKER, host.HELD_MARKER, SLOTS_MARKER)
 
 
 def capacity(name: str) -> int:

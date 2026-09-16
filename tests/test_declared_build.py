@@ -116,6 +116,23 @@ class Declared(unittest.TestCase):
         self.assertEqual((swept["runs_dropped"], swept["keys_evicted"]), (3, 1))
         self.assertIsNone(cache.get("old"))
 
+    def test_selection_is_by_label_pattern_and_a_skipped_dependency_drops_its_dependents(self):
+        """THE ONE SELECTION MECHANISM, and it knows nothing of what a label means."""
+        from rola_devtools.build.scheduler import select
+
+        g = Graph()
+        a = g.node("cells/a", executor="fake_executors:record", params={"cell": "t8"}, cache=False)
+        one = g.node("inst/one", executor="fake_executors:echo", env=self.env(), inputs=[a])
+        two = g.node("inst/two", executor="fake_executors:echo", env=self.env(), inputs=[a])
+        store = g.node("store/two", executor="fake_executors:echo", env=self.env(), deps={"s": two})
+        every = g.group("all", [one, store])
+        self.assertEqual([t.label for t in select([every], only=["inst/one"])], ["cells/a", "inst/one"])
+        self.assertEqual(set(self.go(select([every], only=["inst/*"]))), {"cells/a", "inst/one", "inst/two"})
+        #: skipping the instrument drops the store that reads it and the group over both; `one` still runs
+        self.assertEqual(set(self.go(select([every], skip=["inst/two"]))), {"cells/a", "inst/one"})
+        with self.assertRaises(ValueError):
+            select([every], only=["nothing/*"])
+
     def test_a_build_failure_stops_the_build_and_always_run_still_runs(self):
         g = Graph()
         bad = g.node("bad", executor="fake_executors:boom", env=self.env())

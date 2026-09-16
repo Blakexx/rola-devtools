@@ -39,8 +39,14 @@ def produce(ctx) -> dict:
     """One side, over every cell the node takes as a data input. A cell whose call RAISES is that cell's domain
     failure: it is recorded and the other cells still run, because one unsupported configuration is not a reason to
     lose the comparison on the rest."""
+    import os
+
     import torch
 
+    #: THE THREADS ARE THE SLOTS HELD: torch's intra-op pool otherwise takes every core on the host, headroom included
+    slots = os.environ.get("ROLA_HOST_BUDGET_SLOTS")
+    if slots:
+        torch.set_num_threads(max(1, int(slots)))
     binds = ctx.params.get("binds")
     binding = _binding(binds, str(Path.cwd())) if binds else None
     subject = _resolve(ctx.params["executor"])
