@@ -191,12 +191,15 @@ class Node(unittest.TestCase):
         g = Graph()
         nodes = cell_nodes(g, ["corner-anti", "corner-onehot"])
         kw = {"env": self.env(), "cells": nodes, "holds": {}}
-        left = side(g, "left", executor="fake_sides:refuses_one", **kw)
+        #: one side binds so the record carries a binding proof; both binding the same function would be the vacuous pair
+        left = side(g, "left", executor="fake_sides:refuses_one", binds="fake_sides", **kw)
         right = side(g, "right", executor="fake_sides:refuses_one", **kw)
         out = self.go([diff(g, "d", left=left, right=right, strategy="bit-identical")])["d"]
         self.assertEqual(out.status, "ran")
         self.assertEqual((out.output["refused"], out.output["unusable"], out.output["compared"], out.output["held"]),
                          (["corner-anti"], [], 1, True))
+        #: a record carries no machine path: the binding proof and a refusal's text name files inside the checkout
+        self.assertNotIn(str(HERE), json.dumps(out.output))
 
     def test_a_comparison_that_compared_less_than_it_declared_is_a_refusal_not_a_pass(self):
         """P7, THE COUNT: a gate that cannot run says so rather than reporting a verdict over whatever survived."""

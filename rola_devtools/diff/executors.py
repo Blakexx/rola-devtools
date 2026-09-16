@@ -32,7 +32,8 @@ def _binding(module: str, cwd: str) -> dict:
     if not where.is_relative_to(Path(cwd).resolve()):
         raise AssertionError(f"this side runs in {cwd} and imported {module} from {where}, which is outside it: the "
                              f"comparison would have run one tree against itself")
-    return {"module": module, "file": str(where)}
+    #: RELATIVE TO THE CHECKOUT: a record carries no machine path, and the proof is which file inside the tree
+    return {"module": module, "file": where.relative_to(Path(cwd).resolve()).as_posix()}
 
 
 def produce(ctx) -> dict:
@@ -49,6 +50,11 @@ def produce(ctx) -> dict:
         torch.set_num_threads(max(1, int(slots)))
     binds = ctx.params.get("binds")
     binding = {**_binding(binds, str(Path.cwd())), "executor": ctx.params["executor"]} if binds else None
+    here = str(Path.cwd().resolve())
+
+    def portable(message: str) -> str:
+        """A tool's refusal names files by machine path; a record names them inside the checkout."""
+        return message.replace(here + "/", "").replace(here, "<checkout>")
     subject = _resolve(ctx.params["executor"])
     params = ctx.params["params"]
     out = {}
@@ -57,7 +63,7 @@ def produce(ctx) -> dict:
         try:
             quantities = subject(record, **params)
         except Exception as ex:  # noqa: BLE001 -- the cell's domain failure, recorded and carried
-            out[name] = {"status": "failed", "detail": f"{type(ex).__name__}: {ex}"}
+            out[name] = {"status": "failed", "detail": portable(f"{type(ex).__name__}: {ex}")}
             continue
         if not isinstance(quantities, dict) or not quantities:
             raise TypeError(f"{ctx.params['executor']} returned {type(quantities).__name__} for {name}; "
