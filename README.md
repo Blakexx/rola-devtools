@@ -9,6 +9,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them; each cell declarable as a build NODE whose output is its record |
 | `rola_devtools.build` | the declared build system: targets declared by composable functions in files, keyed by what they read, cached or run in dependency order, holding the machine's resources, each in its own environment's worker |
 | `rola_devtools.timing` | the timing system, as targets: a server of entry workers, registrations of timed callables on cells, interleaved clock-locked sessions, memory passes, null gates |
+| `rola_devtools.diff` | the diff targets: two executors run over the same cells in the environments they name, compared under one rule (bit-identity, the per-slot clause rule, support equality), with a claim the build can fail on -- a difference expected or refused |
 | `rola_devtools.store` | the store target: a result written through rola-results as a run-stamped sample of its source's record |
 | `rola_devtools.verdict` | whether a candidate's timing is a regression against a reference timed in the same sessions: effect size, paired significance, persistence |
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
@@ -88,6 +89,24 @@ stopwatches or a clock off the lock fail the build. `measure_memory` takes each 
 times one registration's entries against copies of themselves in second workers, finding a worker's bias.
 `rola_devtools.store.store` writes a target's result through rola-results as a run-stamped sample of the record its
 source's semantics key.
+
+## The diff
+
+"The same function in two checkouts" and "the kernel against its fp64 reference" are the same question asked twice, so
+`rola_devtools.diff` asks it once. `side` is one side of a comparison: an executor run in the environment it names over
+every cell TARGET it takes, writing its tensors into its own node's workspace. `diff` takes two sides and one named
+STRATEGY -- `bit-identical` (a change that claims to have moved no number), `per-slot` (the oracle's clause rule: a slot
+of size `s` may be off by `max(r*s, a)` under each `(r, a)` clause of its output kind, and by `rtol * envelope` where
+the output is multilinear, the smallest term binding), `support-equal` (which slots survive is the claim, then their
+values) -- and states what it EXPECTS: `same` is a gate on an invariant, `different` is the non-vacuity half, where a
+mutant that goes unseen is the failure. `on_difference` picks what a broken claim is, the same two-way choice every
+other target makes: a build failure, or the target's own recorded outcome.
+
+The raw never leaves the workspace. A side's tensors live in the build cache, which is wipeable and swept; what the
+diff node outputs, and what a store target beside it would file, is the DIFF -- per cell and quantity the worst slot,
+where it is, what bound it, and how many slots were compared. A cell either side could not produce is not a comparison
+that passed: it is counted as unusable and the claim does not hold, because a gate that goes green on a cell neither
+side ran measured nothing.
 
 ## The verdict
 
