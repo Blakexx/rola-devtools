@@ -5,6 +5,7 @@
 The protocol is JSON lines on the process's original stdout; what an executor prints goes to stderr.
 
     {"op": "setup", "id", "executor", "cell", "params"}   ->  {"ready": {"built", "instrument", "draw"}} | {"failed": WHY}
+    {"op": "call", "id"}                                  ->  {"ms": MS} | {"failed": WHY}
     {"op": "call", "id"}                                  ->  {"ms": MS}
     {"op": "drop", "id"}                                  ->  {"dropped": true}
     {"op": "memory", "executor", "cell", "params", "calls"} ->  {"memory": {...}} | {"failed": WHY}
@@ -89,9 +90,12 @@ def serve() -> None:
                     reply = {"ready": {"built": timed.built, "instrument": timed.instrument, "draw": _draw()}}
             elif op == "call":
                 timed = live[request["id"]]
-                if timed.reset:
-                    timed.reset()
-                reply = {"ms": float(timed.call())}
+                try:
+                    if timed.reset:
+                        timed.reset()
+                    reply = {"ms": float(timed.call())}
+                except Exception:  # noqa: BLE001 -- the entry's domain failure: this entry stops, the session goes on
+                    reply = {"failed": traceback.format_exc()[-3000:]}
             elif op == "drop":
                 live.pop(request["id"], None)
                 _release()

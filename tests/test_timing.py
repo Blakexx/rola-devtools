@@ -97,6 +97,21 @@ class Timing(unittest.TestCase):
         built = next(m for m in doc["members"] if m["id"] == "m0")["built"]
         self.assertIsNotNone(built["held"])
 
+    def test_a_call_that_fails_is_the_entrys_domain_failure_and_the_rest_are_timed(self):
+        _g, session, stop = self.graph([("tip/fast", "tip", "fixed", ["t8"], {"ms": 1.0}),
+                                        ("tip/breaks", "tip", "breaks", ["t16"], {})])
+        out = self.go([stop])
+        self.assertEqual(out["session"].status, "ran")
+        doc = self.session(out["session"])
+        statuses = {m["owner"]: m["status"] for m in doc["members"]}
+        self.assertEqual(statuses, {"tip/fast": "ok", "tip/breaks": "failed"})
+        broke = next(m for m in doc["members"] if m["owner"] == "tip/breaks")
+        self.assertIn("cannot run here", broke["error"])
+        #: the failed entry contributes no sample and the other is timed in full
+        self.assertEqual({s["member"] for s in doc["samples"]},
+                         {next(m["id"] for m in doc["members"] if m["owner"] == "tip/fast")})
+        self.assertEqual(len(doc["samples"]), 2 * 3)
+
     def test_a_reset_gives_every_call_the_first_calls_state(self):
         _g, session, stop = self.graph([("tip/reset", "tip", "stateful", ["t8"], {"reset": True}),
                                         ("tip/drift", "tip", "stateful", ["t16"], {})])

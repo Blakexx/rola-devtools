@@ -107,14 +107,27 @@ def _session(ctx, entries: list[dict], reader) -> dict:
         instruments = sorted({m["instrument"] for m, _w, _i in live})
         if len(instruments) > 1:
             raise RuntimeError(f"one session, one stopwatch: its entries time with {instruments}")
+
+        def call(member, worker, ident, what) -> float | None:
+            """One call, or None where the ENTRY failed it: a call that raises is that entry's domain failure -- it is
+            recorded and dropped from the session, and the rest are timed (a worker that DIES is the build's)."""
+            reply = worker.ask({"op": "call", "id": ident, "env": markers}, what)
+            if "failed" in reply:
+                member.update(status="failed", error=_portable(reply["failed"]))
+                live[:] = [row for row in live if row[0] is not member]
+                return None
+            return reply["ms"]
+
         for _ in range(p["warmup"]):
-            for _m, worker, ident in live:
-                worker.ask({"op": "call", "id": ident, "env": markers}, "warmup")
+            for member, worker, ident in list(live):
+                call(member, worker, ident, "warmup")
         rng, samples = random.Random(p["seed"]), []
         for rnd in range(p["rounds"]):
             for rep in range(p["reps"]):
                 for position, (member, worker, ident) in enumerate(rng.sample(live, len(live))):
-                    ms = worker.ask({"op": "call", "id": ident, "env": markers}, member["id"])["ms"]
+                    ms = call(member, worker, ident, member["id"])
+                    if ms is None:
+                        continue
                     samples.append({"member": member["id"], "round": rnd, "rep": rep, "position": position, "ms": ms})
     finally:
         for _m, worker, ident in set_up:

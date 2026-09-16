@@ -38,6 +38,14 @@ def biased(cell, params) -> Timed:
     return Timed(call=lambda: ms, built={"pid": os.getpid()}, instrument="fixed")
 
 
+def breaks(cell, params) -> Timed:
+    """An entry that builds and then fails a call: a domain failure the session records while the rest are timed."""
+    def call() -> float:
+        raise RuntimeError(f"{cell.name}: this launch cannot run here")
+
+    return Timed(call=call, built={}, instrument="fixed")
+
+
 def unbuilt(cell, params) -> Timed:
     raise LookupError(f"{cell.name}: this binary carries no kernel for it")
 

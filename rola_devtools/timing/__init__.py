@@ -20,9 +20,9 @@ An ENTRY EXECUTOR, in the checkout, is `executor(cell, params) -> Timed`: `call(
 elapsed milliseconds by the stopwatch `instrument` names; `built` describes what it built; `reset()`, when the launch
 changes what the next call reads (a carried state, a decode step), restores exactly what the first call saw, untimed;
 `outside_allocator()` returns device bytes its framework's allocator does not see. Every call does the same work on the
-same data. An entry that cannot set up (a kernel this binary lacks) is a DOMAIN failure: recorded in the session, the
-rest timed. A clock read off the lock, two stopwatches in one session, or a crash of the timing itself is a BUILD
-failure.
+same data. An entry that cannot set up (a kernel this binary lacks) or that fails a call is a DOMAIN failure: recorded in the
+session with its error and dropped from it, the rest timed. A clock read off the lock, two stopwatches in one session, a
+worker that dies, or a crash of the timing itself is a BUILD failure.
 """
 from __future__ import annotations
 
