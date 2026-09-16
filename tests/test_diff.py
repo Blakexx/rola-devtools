@@ -156,6 +156,27 @@ class Node(unittest.TestCase):
         self.assertEqual(out["half"].output["unusable"], ["corner-anti"])
         self.assertIn("produced no comparison", out["half"].output["detail"])
 
+    def test_a_side_that_imported_its_library_from_somewhere_else_refuses_to_be_a_side(self):
+        """THE TRAP THAT MAKES A COMPARISON VACUOUS, and it is measured, not hypothetical: an editable install
+        resolves its package through the install's path entry -- the canonical checkout -- so a side run from another
+        worktree can import the very tree it is being compared against and agree with it perfectly."""
+        g = Graph()
+        nodes = cell_nodes(g, ["corner-anti"])
+        out = self.go([side(g, "bound", env=self.env(), executor="fake_sides:flat", cells=nodes, holds={},
+                            binds="rola_devtools")])
+        self.assertEqual(out["bound"].status, "failed")
+        self.assertIn("which is outside it", out["bound"].detail)
+
+    def test_a_comparison_that_compared_less_than_it_declared_is_a_refusal_not_a_pass(self):
+        """P7, THE COUNT: a gate that cannot run says so rather than reporting a verdict over whatever survived."""
+        g = Graph()
+        left, right = self.sides(g, {}, names=("corner-anti",))
+        out = self.go([diff(g, "thin", left=left, right=right, strategy="bit-identical", minimum=99,
+                            on_difference="record")])
+        self.assertEqual(out["thin"].output["quantities"], 2)
+        self.assertFalse(out["thin"].output["held"])  #: every cell agreed, and it still does not pass
+        self.assertIn("was declared to need 99", out["thin"].output["detail"])
+
     def test_the_per_slot_rule_reaches_the_node_and_a_per_quantity_rule_overrides_it(self):
         g = Graph()
         left, right = self.sides(g, {}, left_params={"bump": 2e-3, "where": 0})

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import torch
 
 from rola_devtools import config
-from rola_devtools.cells import FILES, build, carry, cell, central, layer, qkv
+from rola_devtools.cells import FILES, build, carry, cell, central, layer, producer, qkv
 from rola_devtools.cells.regimes import REGIME_AXES, View, check
 from rola_devtools.locks.gpu import gpu_lock
 
@@ -124,8 +124,9 @@ class Records(unittest.TestCase):
 
     def test_every_file_loads_into_one_registry_and_each_kind_builds_its_record(self):
         kinds = {type(build(record)) for record in central().cells.values()}
-        self.assertEqual(kinds, {carry.CarryCell, layer.LayerCell, qkv.QKVCell})
-        self.assertEqual([path.name for path in FILES], ["bases.json", "carry.json", "layer.json", "qkv.json"])
+        self.assertEqual(kinds, {carry.CarryCell, layer.LayerCell, producer.ProducerCell, qkv.QKVCell})
+        self.assertEqual([path.name for path in FILES],
+                         ["bases.json", "carry.json", "layer.json", "producer.json", "qkv.json"])
 
     def test_the_corners_stay_and_the_registry_covers_the_whole_box(self):
         cells = [c for c in map(build, central().cells.values()) if isinstance(c, carry.CarryCell)]
@@ -175,6 +176,25 @@ class Realized(unittest.TestCase):
             q, k, v = qkv.realize(cell("qkv-L256-dv64"))
             self.assertEqual({tuple(t.shape) for t in (q, k, v)}, {(1, 1, 256, 64)})
             self.assertFalse(torch.equal(q, k))
+
+    def test_a_producer_cell_draws_at_its_scale_and_masks_raggedly(self):
+        """The SCALE is the cell's reason to exist -- it is what moves the support boundary two implementations
+        disagree about -- and the mask is RAGGED, because a uniform mask is a narrower cell and not a masked one."""
+        near_dense, mask = producer.realize(cell("producer-w256-s0.5-dense-a1.5"))
+        far, ragged = producer.realize(cell("producer-w256-s30-masked-a1.5"))
+        self.assertEqual((tuple(near_dense.shape), near_dense.dtype), ((8, 256), torch.float64))
+        self.assertIsNone(mask)
+        self.assertGreater(far.std().item(), 10 * near_dense.std().item())
+        live = ragged.sum(dim=-1)
+        self.assertEqual(len(set(live.tolist())), 8)  #: a different live width per row
+        #: a paired cell is two INDEPENDENT sides, because the union split may never assume they agree
+        read, write, _ = producer.realize(cell("producer-union-w16-s3"))
+        self.assertEqual(tuple(read.shape), (2, 5, 16))
+        self.assertFalse(torch.equal(read, write))
+
+    def test_a_producer_cell_refuses_an_alpha_no_shipped_producer_solves(self):
+        with self.assertRaises(ValueError):
+            producer.producer_cell("bad", seed=0, width=8, scale=1.0, alpha=1.7)
 
 
 if __name__ == "__main__":

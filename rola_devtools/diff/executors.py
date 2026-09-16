@@ -23,12 +23,26 @@ def _resolve(spec: str):
     return getattr(importlib.import_module(module), function)
 
 
+def _binding(module: str, cwd: str) -> dict:
+    """WHERE THIS SIDE'S LIBRARY ACTUALLY CAME FROM, asserted rather than arranged for. An editable install resolves
+    its package through the install's path entry -- the canonical checkout -- so a side running from another worktree
+    can import the tree it is being compared against and agree with it perfectly, having compared nothing. A path
+    insertion that did not take effect is exactly as silent as no insertion at all; this is what makes it loud."""
+    where = Path(importlib.import_module(module).__file__).resolve()
+    if not where.is_relative_to(Path(cwd).resolve()):
+        raise AssertionError(f"this side runs in {cwd} and imported {module} from {where}, which is outside it: the "
+                             f"comparison would have run one tree against itself")
+    return {"module": module, "file": str(where)}
+
+
 def produce(ctx) -> dict:
     """One side, over every cell the node takes as a data input. A cell whose call RAISES is that cell's domain
     failure: it is recorded and the other cells still run, because one unsupported configuration is not a reason to
     lose the comparison on the rest."""
     import torch
 
+    binds = ctx.params.get("binds")
+    binding = _binding(binds, str(Path.cwd())) if binds else None
     subject = _resolve(ctx.params["executor"])
     params = ctx.params["params"]
     out = {}
@@ -46,7 +60,7 @@ def produce(ctx) -> dict:
         torch.save({k: v.detach().cpu() for k, v in quantities.items()}, ctx.workspace / file)
         out[name] = {"status": "ok", "file": file, "draw": record.get("draw"),
                      "quantities": {k: {"shape": list(v.shape), "dtype": str(v.dtype)} for k, v in quantities.items()}}
-    return {"cells": out}
+    return {"cells": out, "binding": binding}
 
 
 def _load(side, name: str) -> dict:
@@ -62,6 +76,12 @@ def compare(ctx) -> dict:
     left, right = ctx.deps["left"], ctx.deps["right"]
     strategy, params = ctx.params["strategy"], ctx.params["params"]
     expect, on_difference = ctx.params["expect"], ctx.params["on_difference"]
+
+    #: TWO SIDES THAT RESOLVED THE SAME LIBRARY COMPARED NOTHING, whatever they agreed about
+    bindings = (left.output.get("binding"), right.output.get("binding"))
+    if all(bindings) and bindings[0]["file"] == bindings[1]["file"]:
+        raise AssertionError(f"both sides imported {bindings[0]['module']} from {bindings[0]['file']}: this "
+                             "comparison ran one tree against itself and its verdict means nothing")
 
     cells, differing, unusable = {}, [], []
     for name in sorted(set(left.output["cells"]) | set(right.output["cells"])):
@@ -96,9 +116,14 @@ def compare(ctx) -> dict:
             differing.append(name)
 
     #: THE CLAIM, and whether this run kept it
+    quantities = sum(len(c.get("quantities", {})) for c in cells.values())
     held = (not differing and not unusable) if expect == "same" else (bool(differing) and not unusable)
+    if quantities < ctx.params.get("minimum", 1):
+        held = False
     out = {"strategy": strategy, "expect": expect, "cells": cells, "differing": differing, "unusable": unusable,
-           "compared": len(cells) - len(unusable), "held": held}
+           "compared": len(cells) - len(unusable), "quantities": quantities,
+           "minimum": ctx.params.get("minimum", 1), "held": held,
+           "bindings": {"left": bindings[0], "right": bindings[1]}}
     if not held and on_difference == "fail":
         raise AssertionError(_message(out))
     if not held:
@@ -112,6 +137,10 @@ def _message(out: dict) -> str:
         return (f"{len(out['unusable'])} of {len(out['cells'])} cells produced no comparison "
                 f"({', '.join(out['unusable'][:4])}): a gate that goes green on a cell neither side produced is a gate "
                 f"that measured nothing")
+    if out["quantities"] < out["minimum"]:
+        return (f"this comparison compared {out['quantities']} quantities and was declared to need "
+                f"{out['minimum']}: a gate that cannot run says so, it does not report a verdict over whatever "
+                f"survived")
     if out["expect"] == "same":
         worst = max((q for name in out["differing"] for q in out["cells"][name]["quantities"].values()
                      if not q.get("same")), key=lambda q: q.get("ratio", 0.0), default={})

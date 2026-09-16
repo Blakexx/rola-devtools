@@ -6,7 +6,7 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | Module | What it is |
 |---|---|
 | `rola_devtools.mirror` | the public mirror's export, run by each repository's commit gate and its mirror workflow |
-| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them; each cell declarable as a build NODE whose output is its record |
+| `rola_devtools.cells` | the central cell registry: every input a RoLA measurement or test runs on (carry, layer, producer, QKV), its draw, its seed and the regime it proves, named once; bases and the cells derived from them; each cell declarable as a build NODE whose output is its record |
 | `rola_devtools.build` | the declared build system: targets declared by composable functions in files, keyed by what they read, cached or run in dependency order, holding the machine's resources, each in its own environment's worker |
 | `rola_devtools.timing` | the timing system, as targets: a server of entry workers, registrations of timed callables on cells, interleaved clock-locked sessions, memory passes, null gates |
 | `rola_devtools.diff` | the diff targets: two executors run over the same cells in the environments they name, compared under one rule (bit-identity, the per-slot clause rule, support equality), with a claim the build can fail on -- a difference expected or refused |
@@ -101,6 +101,14 @@ the output is multilinear, the smallest term binding), `support-equal` (which sl
 values) -- and states what it EXPECTS: `same` is a gate on an invariant, `different` is the non-vacuity half, where a
 mutant that goes unseen is the failure. `on_difference` picks what a broken claim is, the same two-way choice every
 other target makes: a build failure, or the target's own recorded outcome.
+
+Two lessons from the tool this replaces are built into the node rather than left to arrangement. A side NAMES the
+library it is supposed to be running (`binds`) and proves it: an editable install resolves its package through the
+install's path entry -- the canonical checkout -- so a side run from another worktree can import the very tree it is
+being compared against and agree with it perfectly, having compared nothing (measured, not hypothetical). The side
+refuses when its library resolved outside its own directory, and the comparison refuses two sides that resolved the
+same file. And a diff states the COUNT it needs (`minimum`): a comparison that compared less than it declared is a
+refusal, not a pass, because a gate that cannot run says so instead of reporting a verdict over whatever survived.
 
 The raw never leaves the workspace. A side's tensors live in the build cache, which is wipeable and swept; what the
 diff node outputs, and what a store target beside it would file, is the DIFF -- per cell and quantity the worst slot,

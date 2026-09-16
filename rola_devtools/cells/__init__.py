@@ -41,7 +41,8 @@ from pathlib import Path
 
 SCHEMA = 1
 #: the central registry's files, one per kind of input
-FILES = tuple(Path(__file__).with_name(name) for name in ("bases.json", "carry.json", "layer.json", "qkv.json"))
+FILES = tuple(Path(__file__).with_name(name)
+              for name in ("bases.json", "carry.json", "layer.json", "producer.json", "qkv.json"))
 
 
 class Registry:
