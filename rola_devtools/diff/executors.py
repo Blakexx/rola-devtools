@@ -32,8 +32,10 @@ def _binding(module: str, cwd: str) -> dict:
     if not where.is_relative_to(Path(cwd).resolve()):
         raise AssertionError(f"this side runs in {cwd} and imported {module} from {where}, which is outside it: the "
                              f"comparison would have run one tree against itself")
-    #: RELATIVE TO THE CHECKOUT: a record carries no machine path, and the proof is which file inside the tree
-    return {"module": module, "file": where.relative_to(Path(cwd).resolve()).as_posix()}
+    #: THE CHECKOUT BY NAME AND THE FILE INSIDE IT: a record carries no machine path, and two worktrees of one tree
+    #: differ by their directory's name -- the store's own convention for a checkout's identity
+    root = Path(cwd).resolve()
+    return {"module": module, "checkout": root.name, "file": where.relative_to(root).as_posix()}
 
 
 def produce(ctx) -> dict:
@@ -92,11 +94,11 @@ def compare(ctx) -> dict:
     #: THE SAME FUNCTION FROM THE SAME LIBRARY COMPARED NOTHING, whatever it agreed with itself about. Two DIFFERENT
     #: functions in one checkout -- a kernel against its fp64 reference -- share a library by design.
     bindings = (left.output.get("binding"), right.output.get("binding"))
-    same_file = all(bindings) and bindings[0]["file"] == bindings[1]["file"]
+    same_file = all(bindings) and all(bindings[0].get(k) == bindings[1].get(k) for k in ("checkout", "file"))
     if same_file and bindings[0].get("executor") == bindings[1].get("executor"):
         raise AssertionError(f"both sides ran {bindings[0].get('executor')} with {bindings[0]['module']} from "
-                             f"{bindings[0]['file']}: this comparison ran one tree against itself and its verdict "
-                             "means nothing")
+                             f"{bindings[0].get('checkout')}/{bindings[0]['file']}: this comparison ran one tree "
+                             "against itself and its verdict means nothing")
 
     cells, differing, unusable, refused = {}, [], [], []
     for name in sorted(set(left.output["cells"]) | set(right.output["cells"])):
