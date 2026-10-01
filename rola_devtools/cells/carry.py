@@ -142,16 +142,18 @@ def simplex(shape, k_tok, gen, device, live=None):
 
 
 def clustered(shape, k_tok, cohort, gen, device):
-    """A simplex draw whose support is ONE contiguous digit window per run of ``cohort`` consecutive tokens -- the
-    structure a whole-window skip exists to exploit, and the one that leaves an owner a handful of live tokens a
-    window."""
+    """A simplex draw whose support is ONE digit set per run of ``cohort`` consecutive tokens -- the structure a
+    whole-window skip exists to exploit, and the one that leaves an owner a handful of live tokens a window. The set is
+    a window of ``k_tok`` consecutive slots of a random relabeling of the level: a cohort's digits carry no label
+    adjacency, as a learned router's do not (adjacent labels rewarded contiguous ownership the real draw will not)."""
     import torch
 
     B, T, H, width = shape
     x = torch.rand(shape, device=device, dtype=torch.float64, generator=gen)
     starts = torch.randint(0, width, (B, T // cohort, 1, 1), device=device, generator=gen)
-    idx = (starts.expand(B, T // cohort, cohort, 1).reshape(B, T, 1, 1)
-           + torch.arange(k_tok, device=device).view(1, 1, 1, k_tok)) % width
+    labels = torch.randperm(width, device=device, generator=gen)
+    idx = labels[(starts.expand(B, T // cohort, cohort, 1).reshape(B, T, 1, 1)
+                  + torch.arange(k_tok, device=device).view(1, 1, 1, k_tok)) % width]
     keep = torch.zeros(shape, device=device, dtype=torch.float64)
     keep.scatter_(-1, idx.expand(B, T, H, k_tok), 1.0)
     x = x * keep
