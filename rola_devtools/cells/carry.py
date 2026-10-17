@@ -60,6 +60,9 @@ class CarryCell:
     tier: str
     #: ``((axis, value), ...)`` on every axis of `REGIME_AXES`; None for a degenerate draw
     regime: tuple[tuple[str, str], ...] | None
+    #: GROUPED QUERIES: the query heads each write head's state is read by (the read side drawn at ``group`` times the
+    #: write side's heads, consecutively); 1 is the ungrouped cell
+    group: int = 1
 
     @property
     def D(self) -> int:
@@ -93,7 +96,8 @@ def carry_cell(name: str, **params) -> CarryCell:
                      draw=params["draw"], k_tok=params["k_tok"], cohort=params["cohort"], support=params["support"],
                      backing=params["backing"], state=params["state"], tier=params["tier"],
                      regime=None if regime is None else tuple((axis, regime[axis]) for axis in REGIME_AXES
-                                                              if axis in regime))
+                                                              if axis in regime),
+                     group=params.get("group", 1))
     unknown = sorted(set(params) - {f.name for f in dataclasses.fields(CarryCell)})
     if unknown:
         raise ValueError(f"{name}: undeclared field(s) {unknown}")
@@ -108,6 +112,9 @@ def carry_cell(name: str, **params) -> CarryCell:
     for field, allowed in (("draw", DRAWS), ("backing", BACKINGS), ("state", STATES), ("tier", TIERS)):
         if getattr(cell, field) not in allowed:
             raise ValueError(f"{name}: {field} {getattr(cell, field)!r} is not one of {allowed}")
+    if cell.group < 1 or (cell.group > 1 and cell.draw not in ("dense", "alt", "both", "cohort")):
+        raise ValueError(f"{name}: a group is one or more query heads a write head, and a grouped cell is a dense, "
+                         f"alt, both or cohort draw; got group {cell.group} on a {cell.draw} draw")
     if (cell.draw == "cohort") != (cell.cohort is not None):
         raise ValueError(f"{name}: a cohort draw carries a cohort and nothing else does")
     if cell.draw in COUNTED and cell.k_tok is None:
@@ -278,7 +285,8 @@ def _corner(cell, shape, gen, device):
 
 
 def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> RealizedCell:
-    """Draw ``cell``: ``[B, L, H, B_l]`` per level, ``[B, L, H]`` gain, ``[B, L, H, DV]`` v, and a carried cell's entry.
+    """Draw ``cell``: ``[B, L, H, B_l]`` per level, ``[B, L, H]`` gain, ``[B, L, H, DV]`` v, and a carried cell's entry --
+    the read levels at ``H group`` query heads for a grouped cell, each write head's read by its ``group`` consecutive.
 
     THE ALTERNATION (Blake, 2026-08-19): per level at most ONE sparse side, and the sparse side alternates -- EVEN levels
     write-sparse / read-dense, ODD levels read-sparse / write-dense -- so the two sides' clause sets are different level
@@ -291,12 +299,12 @@ def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> Re
     shape = (B, cell.tokens, H)
     live = tuple(max(1, int(w * cell.support)) for w in cell.widths)
 
-    def draw(width, kt, lv):
+    def draw(width, kt, lv, at=shape):
         if kt is None or kt >= width:
-            return simplex(shape + (width,), None, gen, device, live=lv)
+            return simplex(at + (width,), None, gen, device, live=lv)
         if cell.draw == "cohort":
-            return clustered(shape + (width,), kt, cell.cohort, gen, device)
-        return simplex(shape + (width,), kt, gen, device, live=lv)
+            return clustered(at + (width,), kt, cell.cohort, gen, device)
+        return simplex(at + (width,), kt, gen, device, live=lv)
 
     if cell.draw in DEGENERATE:
         drawn = _degenerate(cell, shape, gen, device)
@@ -310,7 +318,8 @@ def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> Re
             else:
                 read_k = [kt if level % 2 else None for level in range(cell.D)]
                 write_k = [None if level % 2 else kt for level in range(cell.D)]
-            read = tuple(draw(w, read_k[level], live[level]) for level, w in enumerate(cell.widths))
+            read = tuple(draw(w, read_k[level], live[level], (B, cell.tokens, H * cell.group))
+                         for level, w in enumerate(cell.widths))
             write = tuple(draw(w, write_k[level], live[level]) for level, w in enumerate(cell.widths))
         else:
             read, write = _corner(cell, shape, gen, device)

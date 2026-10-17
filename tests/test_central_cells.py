@@ -160,7 +160,9 @@ class Realized(unittest.TestCase):
                     continue
                 with self.subTest(c.name):
                     drawn = carry.realize(c)
-                    self.assertEqual([tuple(x.shape) for x in drawn.read], [(1, c.tokens, 1, w) for w in c.widths])
+                    self.assertEqual([tuple(x.shape) for x in drawn.read],
+                                     [(1, c.tokens, c.group, w) for w in c.widths])
+                    self.assertEqual([tuple(x.shape) for x in drawn.write], [(1, c.tokens, 1, w) for w in c.widths])
                     self.assertEqual(drawn.entry is not None, c.state == "carried")
                     del drawn
                     torch.cuda.empty_cache()

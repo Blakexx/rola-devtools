@@ -106,7 +106,9 @@ def _token_overlap(view):
     import torch
 
     (_, read), (_, write) = _sides(view)
-    return torch.stack([((r != 0) & (w != 0)).any(dim=-1) for r, w in zip(read, write, strict=True)]).all(dim=0)
+    #: a query head meets its write head: grouped queries read H / H_w query heads a write head, consecutively
+    return torch.stack([((r != 0) & (w.repeat_interleave(r.shape[2] // w.shape[2], dim=2) != 0)).any(dim=-1)
+                        for r, w in zip(read, write, strict=True)]).all(dim=0)
 
 
 def check(axis: str, value: str, view) -> str | None:
