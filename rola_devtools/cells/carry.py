@@ -63,6 +63,9 @@ class CarryCell:
     #: GROUPED QUERIES: the query heads each write head's state is read by (the read side drawn at ``group`` times the
     #: write side's heads, consecutively); 1 is the ungrouped cell
     group: int = 1
+    #: the write heads a draw takes by default (`realize`'s ``H``): one head underfills a card, so a cell timed at
+    #: scale states its heads; 1 is the one-head cell
+    heads: int = 1
 
     @property
     def D(self) -> int:
@@ -97,7 +100,7 @@ def carry_cell(name: str, **params) -> CarryCell:
                      backing=params["backing"], state=params["state"], tier=params["tier"],
                      regime=None if regime is None else tuple((axis, regime[axis]) for axis in REGIME_AXES
                                                               if axis in regime),
-                     group=params.get("group", 1))
+                     group=params.get("group", 1), heads=params.get("heads", 1))
     unknown = sorted(set(params) - {f.name for f in dataclasses.fields(CarryCell)})
     if unknown:
         raise ValueError(f"{name}: undeclared field(s) {unknown}")
@@ -115,6 +118,8 @@ def carry_cell(name: str, **params) -> CarryCell:
     if cell.group < 1 or (cell.group > 1 and cell.draw not in ("dense", "alt", "both", "cohort")):
         raise ValueError(f"{name}: a group is one or more query heads a write head, and a grouped cell is a dense, "
                          f"alt, both or cohort draw; got group {cell.group} on a {cell.draw} draw")
+    if cell.heads < 1:
+        raise ValueError(f"{name}: a cell draws one or more write heads; got heads {cell.heads}")
     if (cell.draw == "cohort") != (cell.cohort is not None):
         raise ValueError(f"{name}: a cohort draw carries a cohort and nothing else does")
     if cell.draw in COUNTED and cell.k_tok is None:
@@ -284,9 +289,10 @@ def _corner(cell, shape, gen, device):
     return tuple(read), tuple(write)
 
 
-def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> RealizedCell:
-    """Draw ``cell``: ``[B, L, H, B_l]`` per level, ``[B, L, H]`` gain, ``[B, L, H, DV]`` v, and a carried cell's entry --
-    the read levels at ``H group`` query heads for a grouped cell, each write head's read by its ``group`` consecutive.
+def realize(cell: CarryCell, B: int = 1, H: int | None = None, device: str = "cuda") -> RealizedCell:
+    """Draw ``cell`` at ``H`` write heads (the cell's ``heads`` unless given): ``[B, L, H, B_l]`` per level, ``[B, L, H]``
+    gain, ``[B, L, H, DV]`` v, and a carried cell's entry -- the read levels at ``H group`` query heads for a grouped
+    cell, each write head's read by its ``group`` consecutive.
 
     THE ALTERNATION (Blake, 2026-08-19): per level at most ONE sparse side, and the sparse side alternates -- EVEN levels
     write-sparse / read-dense, ODD levels read-sparse / write-dense -- so the two sides' clause sets are different level
@@ -295,6 +301,7 @@ def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> Re
     """
     import torch
 
+    H = cell.heads if H is None else H
     gen = torch.Generator(device=device).manual_seed(cell.seed)
     shape = (B, cell.tokens, H)
     live = tuple(max(1, int(w * cell.support)) for w in cell.widths)
@@ -318,16 +325,16 @@ def realize(cell: CarryCell, B: int = 1, H: int = 1, device: str = "cuda") -> Re
             else:
                 read_k = [kt if level % 2 else None for level in range(cell.D)]
                 write_k = [None if level % 2 else kt for level in range(cell.D)]
-            read = tuple(draw(w, read_k[level], live[level], (B, cell.tokens, H * cell.group))
+            #: each level cast as it is drawn, one fp64 level alive at a time (the stream's order unchanged)
+            read = tuple(draw(w, read_k[level], live[level], (B, cell.tokens, H * cell.group)).to(torch.bfloat16)
                          for level, w in enumerate(cell.widths))
-            write = tuple(draw(w, write_k[level], live[level]) for level, w in enumerate(cell.widths))
+            write = tuple(draw(w, write_k[level], live[level]).to(torch.bfloat16) for level, w in enumerate(cell.widths))
         else:
             read, write = _corner(cell, shape, gen, device)
+            read, write = tuple(x.to(torch.bfloat16) for x in read), tuple(x.to(torch.bfloat16) for x in write)
         gain = torch.rand(*shape, device=device, dtype=torch.float64, generator=gen) + 0.5
         v = torch.randn(*shape, cell.dv, device=device, dtype=torch.float64, generator=gen)
-        drawn = RealizedCell(cell=cell, read=tuple(x.to(torch.bfloat16) for x in read),
-                             write=tuple(x.to(torch.bfloat16) for x in write), gain=gain.to(torch.bfloat16),
-                             v=v.to(torch.bfloat16))
+        drawn = RealizedCell(cell=cell, read=read, write=write, gain=gain.to(torch.bfloat16), v=v.to(torch.bfloat16))
     if cell.state == "carried":
         entry = 0.1 * torch.randn(B * H, cell.N, cell.dv + 1, device=device, dtype=torch.float64, generator=gen)
         entry[..., cell.dv] = entry[..., cell.dv].abs()

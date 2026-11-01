@@ -91,6 +91,9 @@ def serve() -> None:
                     reply = {"failed": traceback.format_exc()[-3000:]}
                 else:
                     live[request["id"]] = timed
+                    #: the build's own blocks back to the device (a cell drawn in fp64 is gigabytes the entry never
+                    #: reads again): a session holds every member set up at once, and only what each keeps is live
+                    _release()
                     reply = {"ready": {"built": timed.built, "instrument": timed.instrument, "draw": _draw()}}
             elif op == "call":
                 timed = live[request["id"]]

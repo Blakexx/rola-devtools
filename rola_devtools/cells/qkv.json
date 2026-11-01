@@ -14,6 +14,7 @@
   {"name": "qkv-L1792-dv64", "seed": 0, "tokens": 1792, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
   {"name": "qkv-L4096-dv64", "seed": 0, "tokens": 4096, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
   {"name": "qkv-L16384-dv64", "seed": 0, "tokens": 16384, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
-  {"name": "qkv-L65536-dv64", "seed": 0, "tokens": 65536, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true}
+  {"name": "qkv-L65536-dv64", "seed": 0, "tokens": 65536, "dv": 64, "heads": 1, "batch": 1, "dtype": "bfloat16", "causal": true},
+  {"name": "qkv-L65536-dv64-h4", "seed": 0, "tokens": 65536, "dv": 64, "heads": 4, "batch": 1, "dtype": "bfloat16", "causal": true}
  ]
 }
