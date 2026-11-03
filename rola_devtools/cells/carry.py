@@ -22,12 +22,12 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass
 
-DRAWS = ("dense", "alt", "both", "cohort", "dead", "deposit",
+DRAWS = ("dense", "alt", "both", "read", "write", "cohort", "dead", "deposit",
          "tied", "anti", "cold", "readonly", "concentrated", "onehot", "flip")
 #: the draws with no support to sample, which state it themselves and declare no regime
 DEGENERATE = ("dead", "deposit")
 #: the draws that carry a `k_tok`
-COUNTED = ("alt", "both", "cohort", "tied")
+COUNTED = ("alt", "both", "read", "write", "cohort", "tied")
 BACKINGS = ("dense", "paged")
 STATES = ("none", "fresh", "carried")
 #: who a cell is sized for: `oracle`, small enough for an fp64 reference; `probe`, a measurement's size; `both`
@@ -81,12 +81,14 @@ class CarryCell:
     def declared_sparsity(self) -> tuple[tuple[bool, bool], ...]:
         """Per level, ``(read sparse, write sparse)``: the support the draw DECLARES, which a kernel may skip on. A dense,
         degenerate or corner draw declares nothing; the alternation declares the read side sparse at the odd levels and
-        the write side at the even ones; ``both`` declares level zero sparse on both sides. A declaration may understate
-        what the draw carries (a tied draw's zeros are undeclared) and never overstates it."""
-        if self.draw not in ("alt", "both", "cohort") or self.k_tok is None:
+        the write side at the even ones; ``both`` declares level zero sparse on both sides, ``read`` and ``write`` on that
+        side alone. A declaration may understate what the draw carries (a tied draw's zeros are undeclared) and never
+        overstates it."""
+        if self.draw not in ("alt", "both", "read", "write", "cohort") or self.k_tok is None:
             return ((False, False),) * self.D
-        if self.draw == "both":
-            return tuple((level == 0, level == 0) for level in range(self.D))
+        if self.draw in ("both", "read", "write"):
+            return tuple((level == 0 and self.draw != "write", level == 0 and self.draw != "read")
+                         for level in range(self.D))
         return tuple((bool(level % 2), not level % 2) for level in range(self.D))
 
 
@@ -297,7 +299,8 @@ def realize(cell: CarryCell, B: int = 1, H: int | None = None, device: str = "cu
     THE ALTERNATION (Blake, 2026-08-19): per level at most ONE sparse side, and the sparse side alternates -- EVEN levels
     write-sparse / read-dense, ODD levels read-sparse / write-dense -- so the two sides' clause sets are different level
     subsets. ``both`` is sparse on both sides at level zero and dense above it; the two sides are drawn INDEPENDENTLY
-    there on purpose, because a kernel may never assume they agree.
+    there on purpose, because a kernel may never assume they agree. ``read`` is sparse on the read side alone at level
+    zero, ``write`` on the write side alone: one side listed, the other dense at every level.
     """
     import torch
 
@@ -317,11 +320,13 @@ def realize(cell: CarryCell, B: int = 1, H: int | None = None, device: str = "cu
         drawn = _degenerate(cell, shape, gen, device)
     else:
         kt = cell.k_tok
-        if cell.draw in ("dense", "alt", "both", "cohort"):
+        if cell.draw in ("dense", "alt", "both", "read", "write", "cohort"):
             if cell.draw == "dense":
                 read_k = write_k = [None] * cell.D
-            elif cell.draw == "both":
-                read_k = write_k = [kt if level == 0 else None for level in range(cell.D)]
+            elif cell.draw in ("both", "read", "write"):
+                first = [kt if level == 0 else None for level in range(cell.D)]
+                read_k = first if cell.draw != "write" else [None] * cell.D
+                write_k = first if cell.draw != "read" else [None] * cell.D
             else:
                 read_k = [kt if level % 2 else None for level in range(cell.D)]
                 write_k = [None if level % 2 else kt for level in range(cell.D)]
