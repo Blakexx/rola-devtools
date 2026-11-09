@@ -37,8 +37,12 @@ MACHINE: dict[str, dict[str, Key]] = {
         "build_jobs": Key("int?", None, "ninja jobs a build asks for; null derives it from nvcc_threads and memory"),
         "budget_slots": Key("int?", None, "the machine-wide compute slots every build and census compile shares; "
                             "null derives cores - 2 bounded by memory (rola_devtools.locks.host)"),
-        "lock_dir": Key("path", "/tmp", "where the host budget's slot locks live; host and containers must share it"),
-        "gpu_lock": Key("path", "/tmp/rola_gpu.lock", "the GPU lock file; host and containers must share it"),
+        #: THE ONE LOCK PATH: the machine's locks in one directory of their own, the same path on every machine -- a
+        #: container's launcher mounts its host's there, so the two serialize on one set of files with no detection
+        "lock_dir": Key("path", "/tmp/rola-locks", "where the machine's locks live (the host budget's slots, the file "
+                        "locks, the GPU lock beside them): one path on every machine, a container's mounted from its host"),
+        "gpu_lock": Key("path", "/tmp/rola-locks/rola_gpu.lock", "the GPU lock file, in the lock directory, so one mount "
+                        "shares every lock"),
         "gpu_shared_slots": Key("int", 2, "correctness runs that may hold the GPU lock shared at once"),
         "nice": Key("bool", True, "locked processes lower their own CPU and IO priority"),
         "locks_trace": Key("bool", False, "print every lock acquire and release to stderr"),

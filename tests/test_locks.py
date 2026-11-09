@@ -124,6 +124,22 @@ class HostBudget(Configured):
             config.reload()
 
 
+class LockPath(Configured):
+    def test_every_lock_lives_in_one_directory_made_on_first_use(self):
+        self.assertEqual(Path(config.MACHINE["host"]["gpu_lock"].default).parent,
+                         Path(config.MACHINE["host"]["lock_dir"].default))
+        locks = self.tmp / "fresh" / "locks"
+        env = self.env(host={"lock_dir": str(locks), "gpu_lock": str(locks / "gpu.lock"), "budget_slots": 1,
+                             "nice": False})
+        gpu = self.spawn(HOLD_GPU_LOCK, env, str(locks / "gpu.lock"), "exclusive")
+        self.assertEqual(self.line(gpu, TIMEOUT_S), "ACQUIRED\n")
+        self.release(gpu)
+        budget = self.spawn(HOLD_HOST_BUDGET, env)
+        self.assertEqual(self.line(budget, TIMEOUT_S), "ACQUIRED\n")
+        self.release(budget)
+        self.assertTrue(any(locks.iterdir()))
+
+
 class GpuLock(Configured):
     def test_the_shared_pool_admits_two_and_blocks_a_third(self):
         path = str(self.tmp / "gpu.lock")

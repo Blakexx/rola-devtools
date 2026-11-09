@@ -18,9 +18,9 @@ covers same-process re-entry (a fixture calling a helper that also locks) and th
 then launching `compute-sanitizer python -m pytest ...`, whose own fixture sees the marker and proceeds) -- a double
 acquisition cannot deadlock by construction.
 
-**THE LOCK FILE.** `host.gpu_lock` in the dev config, default `/tmp/rola_gpu.lock`. `/tmp` is not a home path and is the
-directory every GPU-touching container bind-mounts from the host, so a container and the bare host serialize against the
-same lock.
+**THE LOCK FILE.** `host.gpu_lock` in the dev config, default `/tmp/rola-locks/rola_gpu.lock`: in the lock directory,
+one path on every machine, which a GPU-touching container's launcher mounts from its host at that same path, so a
+container and the bare host serialize against the same lock.
 
 **TWO MODES (LOCKS brief, 2026-08-29).** Blake: "allow some controlled level of parallelism" -- MEASURED work needs the
 device to itself, nothing else touching it while a number is read; CORRECTNESS work (the oracle, integration and CUDA
@@ -47,6 +47,8 @@ HELD_MARKER = "ROLA_GPU_LOCK_HELD"
 
 
 def _open_ex(path: str) -> int:
+    #: the lock directory is made on first use (a fresh boot's /tmp holds none)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     return os.open(path, os.O_CREAT | os.O_RDWR, 0o666)
 
 

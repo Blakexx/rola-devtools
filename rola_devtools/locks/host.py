@@ -6,14 +6,15 @@ of parallelism").
 `clang-tidy --cuda-host-only` pass over one translation unit, and a pytest tier that forks workers are all host-CPU-heavy
 in the same way a compile is, and none of them drew from the budget a compile did. Three of those beside a full-budget
 compile is the "12+ cicc on one host" shape with a different process name on each contender. Slot counts live in exactly
-one place -- here -- and rola's `build_lock.py` draws its compile slots from this pool.
+one place -- here -- and every build draws its compile slots from this pool (the graph's front door, around each build
+phase).
 
 **THE MECHANISM**, the one `rola_devtools.locks.gpu` also uses, generalized to N callers: `budget_slots()` lock files
-under `host.lock_dir` (dev config; default `/tmp` -- a test points every acquirer at a throwaway directory instead of the
-real, possibly contended, locks). `acquire(n)` waits for at least one free slot (never proceeds with zero), then
-opportunistically takes up to `n` more that are free right now without waiting further for them -- so N concurrent
-callers each make some progress rather than one winning the whole budget or all of them deadlocking.
-`acquire(n, exclusive=True)` waits for and holds every slot (a gate draw).
+under `host.lock_dir` (dev config; default `/tmp/rola-locks`, made on first use -- a test points every acquirer at a
+throwaway directory instead of the real, possibly contended, locks). `acquire(n)` waits for at least one free slot
+(never proceeds with zero), then opportunistically takes up to `n` more that are free right now without waiting further
+for them -- so N concurrent callers each make some progress rather than one winning the whole budget or all of them
+deadlocking. `acquire(n, exclusive=True)` waits for and holds every slot (a gate draw).
 
 **REENTRANT BY CONSTRUCTION**: an acquire sets `ROLA_HOST_BUDGET_HELD` in the process environment; a nested acquire that
 finds the marker set is a no-op, so an outer tool that holds slots and calls an inner tool that also acquires cannot
@@ -65,8 +66,11 @@ HELD_MARKER = "ROLA_HOST_BUDGET_HELD"
 
 
 def _lock_dir() -> Path:
-    """`host.lock_dir`: a test battery points it at a throwaway directory; host and containers share the real one."""
-    return Path(machine("host.lock_dir"))
+    """`host.lock_dir`, made on first use: a test battery points it at a throwaway directory; host and containers share
+    the real one."""
+    path = Path(machine("host.lock_dir"))
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def _slot_path(i: int) -> Path:
