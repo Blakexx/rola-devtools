@@ -20,7 +20,9 @@ acquisition cannot deadlock by construction.
 
 **THE LOCK FILE.** `host.gpu_lock` in the dev config, default `/tmp/rola-locks/rola_gpu.lock`: in the lock directory,
 one path on every machine, which a GPU-touching container's launcher mounts from its host at that same path, so a
-container and the bare host serialize against the same lock.
+container and the bare host serialize against the same lock. The lock is the files beside that path (`.wq`, `.rw`,
+`.slotN`), never the path itself, so a binary with no `gpu_lock()` of its own runs under
+`python -m rola_devtools.locks.gpu [--shared] -- <command...>`, never a raw `flock`.
 
 **TWO MODES (LOCKS brief, 2026-08-29).** Blake: "allow some controlled level of parallelism" -- MEASURED work needs the
 device to itself, nothing else touching it while a number is read; CORRECTNESS work (the oracle, integration and CUDA
@@ -34,6 +36,8 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import os
+import subprocess
+import sys
 import time
 
 from ..config import machine
@@ -151,3 +155,28 @@ def gpu_lock(path: str | None = None, *, mode: str = "exclusive"):
         for fd in held:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
+
+
+def _main(argv: list[str]) -> int:
+    """`python -m rola_devtools.locks.gpu [--shared] -- <command...>`
+
+    A command under the GPU lock: the form for a binary with no `gpu_lock()` of its own (`cuda-gdb`, `ncu` run by
+    hand). Exclusive unless `--shared`; the command and its children see the lock held, so a rola entry point inside
+    it opens nothing.
+    """
+    import argparse
+
+    ap = argparse.ArgumentParser(prog="python -m rola_devtools.locks.gpu")
+    ap.add_argument("--shared", action="store_true")
+    ap.add_argument("cmd", nargs=argparse.REMAINDER)
+    a = ap.parse_args(argv)
+    cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
+    if not cmd:
+        print("usage: python -m rola_devtools.locks.gpu [--shared] -- <command...>", file=sys.stderr)
+        return 2
+    with gpu_lock(mode="shared" if a.shared else "exclusive"):
+        return subprocess.run(cmd).returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv[1:]))

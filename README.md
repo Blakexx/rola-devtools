@@ -176,7 +176,9 @@ with host.acquire(4, label="tidy"):   # up to 4 host-compute slots, at least one
     ...
 ```
 
-`python -m rola_devtools.locks.host [--slots N] [--exclusive] -- <command...>` runs a command under the budget. A nested
+`python -m rola_devtools.locks.host [--slots N] [--exclusive] -- <command...>` runs a command under the budget, and
+`python -m rola_devtools.locks.gpu [--shared] -- <command...>` one under the GPU lock (a binary with no `gpu_lock()` of
+its own: `cuda-gdb`, `ncu` by hand). A nested
 acquire in the same process or a child is a no-op, so an outer tool that locks can start an inner tool that locks.
 `rola_devtools.locks.clock.engage(read_ghz)` locks the clock the host declares, proves it with the device's own reading,
 and unlocks on every exit.

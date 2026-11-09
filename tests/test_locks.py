@@ -124,6 +124,17 @@ class HostBudget(Configured):
             config.reload()
 
 
+class GpuLockCommand(Configured):
+    def test_a_command_runs_under_the_lock_and_its_children_see_it_held(self):
+        env = self.env(host={"lock_dir": str(self.tmp), "gpu_lock": str(self.tmp / "gpu.lock"), "nice": False})
+        done = subprocess.run([sys.executable, "-m", "rola_devtools.locks.gpu", "--", sys.executable, "-c",
+                               "import os; print(os.environ['ROLA_GPU_LOCK_HELD'])"], env=env, cwd=ROOT,
+                              capture_output=True, text=True, timeout=TIMEOUT_S)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(done.stdout.strip().isdigit(), done.stdout)
+        self.assertTrue((self.tmp / "gpu.lock.rw").exists())
+
+
 class LockPath(Configured):
     def test_every_lock_lives_in_one_directory_made_on_first_use(self):
         self.assertEqual(Path(config.MACHINE["host"]["gpu_lock"].default).parent,
