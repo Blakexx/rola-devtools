@@ -100,7 +100,8 @@ def main(argv: list[str] | None = None) -> int:
         if not (env / ".complete").is_file():
             #: an environment without its completion mark is an interrupted build's
             shutil.rmtree(env, ignore_errors=True)
-            subprocess.run([a.uv, "python", "install", a.python], env=uv_env, check=True)
+            #: the interpreter in the store alone: no `python3.X` link in the user's `~/.local/bin`
+            subprocess.run([a.uv, "python", "install", "--no-bin", a.python], env=uv_env, check=True)
             subprocess.run([a.uv, "venv", "--python", a.python, str(env)], env=uv_env, check=True)
             subprocess.run([a.uv, "pip", "sync", "--python", str(python), "--require-hashes", str(a.lock), *index],
                            env=uv_env, check=True)
