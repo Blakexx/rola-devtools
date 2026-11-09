@@ -15,6 +15,10 @@ carry it. It is a development dependency: nothing a user installs imports it.
 | `rola_devtools.process` | `subprocess.run` for a command that starts processes of its own: a timeout or an interrupt stops the whole tree |
 | `rola_devtools.config` | the dev config reader: one directory of JSON files a section, every key declared; the machine's `host` and `clock` sections every repository shares |
 | `rola_devtools.locks` | the machine's locks: the GPU lock (exclusive or shared), the host-compute budget and named file locks, the SM clock lock |
+| `rola_devtools.graph` | the build graph's shared machinery: the front door every repository's Bazel runs through, the environment's store builder, the test tiers' sharding plugin |
+
+The `rola_devtools` Bazel module (`MODULE.bazel`, `bazel/`) is the rest of the build graph's machinery: its
+environment extension and generic rules (below).
 
 ## The public mirror
 
@@ -177,14 +181,45 @@ acquire in the same process or a child is a no-op, so an outer tool that locks c
 `rola_devtools.locks.clock.engage(read_ghz)` locks the clock the host declares, proves it with the device's own reading,
 and unlocks on every exit.
 
+## The build graph
+
+Every RoLA repository builds and checks itself with Bazel, through the same machinery: this repository's Bazel module.
+A repository depends on it at a public commit (`bazel_dep` plus a `git_override` in its `MODULE.bazel`, the one pin of
+rola-devtools it has).
+
+**The front door.** bazelisk runs a repository's `bazel/bazel` (the wrapper its `.bazeliskrc` names) in place of the
+Bazel it downloaded; that stub runs `rola_devtools.graph.front_door`, found through the machine's rola-devtools checkout,
+so every Bazel command in a checkout goes through one implementation. It hands Bazel the machine's settings from the
+dev config (the shared caches and the environment's store), overrides the repository's pin of this module with the
+machine's checkout (an rc file of the workspace's own), so a change made here is the one every graph on the machine
+runs, and holds the host budget around each build phase. `bazel --commit-gate` is the commit gate below.
+
+**The environment extension** (`bazel/environment.bzl`). Its tags make the repositories a graph runs on:
+
+| Tag | Repository |
+|---|---|
+| `python` | a Python environment: the pinned CPython, a hash-pinned lock's packages, then packages pinned by commit and this module's `rola_devtools`, built once a key into the machine's shared store (`rola_devtools.graph.make_env`); `isolated_builds = False` builds the pinned packages against the environment, for one whose build imports a locked package |
+| `pinned` | a release pinned by URL and digest (uv, mold, clang-tidy) |
+| `cuda_toolkit` | a CUDA toolkit from NVIDIA's redistributables, pinned by their manifest's digest (which carries each component's) |
+| `host_cc`, `host_gpu` | the host C++ compiler's and the machine's devices' identities, which actions that depend on them are keyed on |
+| `tree` | the checkout's tracked files (`git ls-files`; the commit's index under the commit gate) |
+
+`pins/uv_pin.json` is the uv every workspace's environment is built by.
+
+**The generic rules** (`bazel/rules.bzl`): a check over the tracked tree (`tree_test`), a check of the commit
+(`checkout_test`), a tree tool as a test (`tool_test`) or a run target (`tool_run`), a package's part of the tree
+(`tree_part`), and the pytest tiers (`pytest_tier`, `device_lane`). Each takes the workspace's environment as an
+argument; a workspace wraps them once with its own.
+
 ## Tests and the gate
 
 ```bash
-python -m unittest discover -s tests -t .
+bazel test //:gate
 ```
 
-The commit gate (`.githooks/pre-commit` -> `.pre-commit-config.yaml`) runs ruff, its blank-line family, the tests and
-the mirror's declaration check, from the venv the checkout names (`git config rola.venv`).
+The gate is ruff, its blank-line family, the tests and the mirror's declaration check, on the graph's own environment.
+The commit gate (`.githooks/pre-commit` -> `bazel/bazel --commit-gate`, every RoLA repository's hook) runs `//:gate` on
+the commit as git will write it: the changes not staged set aside, the tree the commit's index.
 
 ## Publishing
 

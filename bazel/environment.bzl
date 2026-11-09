@@ -2,11 +2,12 @@
 graph runs on -- a Python environment built from a lock into the machine's shared store (`python`), a release pinned
 by digest (`pinned`), the host C++ compiler's and the machine's devices' identities (`host_cc`, `host_gpu`), a pinned
 CUDA toolkit (`cuda_toolkit`) and the checkout's tracked files (`tree`). The root module names each repository and
-hands it the workspace's own pins and files; nothing here names a workspace. Docs: README.md, the build graph.
+hands it the workspace's own pins and files; nothing here names a workspace. Docs: README.md#the-build-graph.
 
     environment = use_extension("@rola_devtools//bazel:environment.bzl", "environment")
-    environment.pinned(name = "uv", pin = "//tools:uv_pin.json", build = UV_BUILD)
-    environment.python(name = "env", lock = "//:requirements.lock", uv = "@uv//:uv", uv_pin = "//tools:uv_pin.json")
+    environment.pinned(name = "uv", pin = "@rola_devtools//pins:uv_pin.json", build = UV_BUILD)
+    environment.python(name = "env", lock = "//:requirements.lock", uv = "@uv//:uv",
+                       uv_pin = "@rola_devtools//pins:uv_pin.json")
     environment.tree(name = "tree")
     use_repo(environment, "env", "tree", "uv")
 """
@@ -76,6 +77,8 @@ def _python_impl(rctx):
     ]
     for package in packages:
         args += ["--package", package]
+    if not rctx.attr.isolated_builds:
+        args.append("--no-build-isolation")
     built = rctx.execute(args, timeout = 7200, quiet = False)
     if built.return_code != 0:
         fail("the environment's store build failed (rola_devtools.graph.make_env):\n" + built.stderr)
@@ -113,6 +116,9 @@ _python_attrs = {
     "index_field": attr.string(default = "torch_index", doc = "the field of `index_from` that names the index"),
     "devtools": attr.bool(default = True, doc = "rola_devtools from this module's source, after the lock"),
     "packages": attr.string_list(doc = "requirements pinned by commit (`name @ git+URL@COMMIT`), after the lock"),
+    "isolated_builds": attr.bool(default = True, doc = "build each package apart from the environment; False builds " +
+                                                         "against it, for a package whose build imports a locked one " +
+                                                         "(the lock then carries the build backend)"),
     "post": attr.label(doc = "a script the environment's interpreter runs, its output the facts flags.bzl opens with"),
     "post_args": attr.label_list(allow_files = True, doc = "the script's arguments, each a file's path"),
     "post_env": attr.string_list(doc = "the repository environment variables the script reads"),

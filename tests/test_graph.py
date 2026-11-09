@@ -63,6 +63,12 @@ class StoreKey(unittest.TestCase):
             (package / "m.py").write_text("x = 2\n")
             self.assertNotEqual(make_env._identity(str(package)), first)
 
+    def test_building_against_the_environment_is_another_environment(self):
+        pin = "rola-zoology @ git+https://github.com/Blakexx/rola-zoology@ea219fde"
+        isolated = make_env._key(b"lock", [pin], "3.11.13", "uv 0.9", "", True)
+        self.assertEqual(make_env._key(b"lock", [pin], "3.11.13", "uv 0.9", "", True), isolated)
+        self.assertNotEqual(make_env._key(b"lock", [pin], "3.11.13", "uv 0.9", "", False), isolated)
+
     def test_a_requirement_s_key_is_its_text(self):
         pin = "zoology @ git+https://github.com/HazyResearch/zoology@0123456789abcdef0123456789abcdef01234567"
         self.assertEqual(make_env._identity(pin), pin.encode())

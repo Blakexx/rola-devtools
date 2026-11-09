@@ -199,7 +199,7 @@
   "moduleExtensions": {
     "//bazel:environment.bzl%environment": {
       "general": {
-        "bzlTransitiveDigest": "kAPTjedv0bH3+V8ilIZyksyepBrgzrGCTaXvDglKGzw=",
+        "bzlTransitiveDigest": "nYRcMSeAmQnM3u2iQk3pDAZ0dQ/8XSSaZkIxdBKMhXg=",
         "usagesDigest": "4L1g9WEMN69936Pm3hFJRFRW+55tRbtqXG15vgTqfUk=",
         "recordedInputs": [
           "REPO_MAPPING:,uv +environment+uv"
@@ -217,6 +217,7 @@
               "packages": [
                 "rola-results @ git+https://github.com/Blakexx/rola-results@40b41681bb4fd22f744810a3a2281c8e7c376327"
               ],
+              "isolated_builds": true,
               "post_args": [],
               "post_env": [],
               "watch": [],

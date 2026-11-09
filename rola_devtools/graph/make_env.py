@@ -3,9 +3,11 @@ on the machine shares, under a file lock -- a second builder of the same key wai
 
 The lock's packages are installed hash-checked (`--require-hashes`); then each `--package`, without its dependencies
 (the lock carries them): a local directory, keyed by the content of its files, or a requirement pinned by commit
-(`name @ git+URL@COMMIT`, which has no hash to require), keyed by its text. The key hashes the lock, every package,
-the Python version, uv's version and the extra index, so a change to any is a new environment and an unchanged one is
-never rebuilt. uv's cache in the store hardlinks package files, so environments share their bytes.
+(`name @ git+URL@COMMIT`, which has no hash to require), keyed by its text. A package builds apart from the
+environment unless `--no-build-isolation` builds it against it (a build that imports a locked package; the lock then
+carries the build backend). The key hashes the lock, every package, the Python version, uv's version, the extra index
+and the isolation, so a change to any is a new environment and an unchanged one is never rebuilt. uv's cache in the
+store hardlinks package files, so environments share their bytes.
 
 Run by the `rola_devtools` module's environment extension (bazel/environment.bzl) under the machine's `python3`;
 prints the environment's paths as JSON on its last line.
@@ -47,7 +49,13 @@ def _identity(package: str) -> bytes:
     return _content(path) if path.is_dir() else package.encode()
 
 
-def _install(uv: str, python: Path, package: str, uv_env: dict, scratch: Path) -> None:
+def _key(lock: bytes, packages: list[str], python: str, uv_version: str, index: str, isolated: bool) -> str:
+    """The environment's key: everything it is built from."""
+    parts = [lock, *map(_identity, packages), python.encode(), uv_version.encode(), index.encode()]
+    return hashlib.sha256(b"\0".join(parts + ([] if isolated else [b"no-build-isolation"]))).hexdigest()[:16]
+
+
+def _install(uv: str, python: Path, package: str, uv_env: dict, scratch: Path, isolated: bool) -> None:
     """One package without its dependencies; a local directory from a copy of its content, so its build writes nothing
     into the checkout it came from."""
     if Path(package).is_dir():
@@ -59,7 +67,9 @@ def _install(uv: str, python: Path, package: str, uv_env: dict, scratch: Path) -
         copy = scratch / Path(package).name
         shutil.copytree(package, copy, ignore=ignored, symlinks=True)
         package = str(copy)
-    subprocess.run([uv, "pip", "install", "--python", str(python), "--no-deps", package], env=uv_env, check=True)
+    isolation = [] if isolated else ["--no-build-isolation"]
+    subprocess.run([uv, "pip", "install", "--python", str(python), "--no-deps", *isolation, package], env=uv_env,
+                   check=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,14 +79,15 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--python", required=True, help="the interpreter version uv installs")
     ap.add_argument("--lock", type=Path, required=True, help="the hash-pinned lock (`uv pip compile --generate-hashes`)")
     ap.add_argument("--index", default="", help="an extra index the lock's packages come from (a torch index)")
+    ap.add_argument("--no-build-isolation", action="store_true",
+                    help="build each package against the environment (its build imports a locked package)")
     ap.add_argument("--package", action="append", default=[],
                     help="installed after the lock without its dependencies: a local directory, or a requirement "
                          "pinned by commit")
     a = ap.parse_args(argv)
 
     uv_version = subprocess.run([a.uv, "--version"], capture_output=True, text=True, check=True).stdout.strip()
-    key = hashlib.sha256(b"\0".join([a.lock.read_bytes(), *map(_identity, a.package), a.python.encode(),
-                                     uv_version.encode(), a.index.encode()])).hexdigest()[:16]
+    key = _key(a.lock.read_bytes(), a.package, a.python, uv_version, a.index, not a.no_build_isolation)
     a.store.mkdir(parents=True, exist_ok=True)
     env = a.store / "venvs" / key
     python = env / "bin" / "python3"
@@ -95,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
                            env=uv_env, check=True)
             with tempfile.TemporaryDirectory(dir=a.store) as scratch:
                 for package in a.package:
-                    _install(a.uv, python, package, uv_env, Path(scratch))
+                    _install(a.uv, python, package, uv_env, Path(scratch), not a.no_build_isolation)
             (env / ".complete").write_text(f"{uv_version}\n")
     probe = ("import json, sys, sysconfig; print(json.dumps({'site': sysconfig.get_paths()['purelib'], "
              "'include': sysconfig.get_paths()['include'], 'base': sys.base_prefix}))")
