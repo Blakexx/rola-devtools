@@ -1,0 +1,6 @@
+"""The module's Starlark: the environment extension (environment.bzl) and the generic rules (rules.bzl)."""
+
+exports_files([
+    "environment.bzl",
+    "rules.bzl",
+])

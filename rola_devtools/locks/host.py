@@ -57,8 +57,7 @@ def _default_slots() -> int:
 
 def budget_slots() -> int:
     """The pool's size: `host.budget_slots`, else derived from the cores and memory (`_default_slots`). Cores - 2 leaves
-    headroom for the interactive shell and the agent driving the tool, the reasoning rola's
-    `build_flags.default_max_jobs` applies to one build's jobs, applied to the whole host-compute pool."""
+    headroom for the interactive shell and the agent driving the tool."""
     return machine("host.budget_slots") or _default_slots()
 
 

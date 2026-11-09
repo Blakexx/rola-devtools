@@ -1,0 +1,4 @@
+"""rola-devtools' root package: the files the module's environment extension reads of this checkout (the Python
+package's project file, by which it finds the package's source)."""
+
+exports_files(["pyproject.toml"])

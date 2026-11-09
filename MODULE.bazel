@@ -1,0 +1,11 @@
+"""rola-devtools as a Bazel module: the build graph's shared machinery every RoLA repository's graph runs on -- the
+environment extension (bazel/environment.bzl) and the generic rules (bazel/rules.bzl) -- beside the Python package the
+front door and the environment's store builder are (`rola_devtools.graph`). A workspace depends on it by `bazel_dep`
+at a public commit (`git_override`), and its front door overrides that with the machine's checkout."""
+
+module(name = "rola_devtools", version = "0.1.0")
+
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+#: a workspace's environment BUILD file may define C++ targets over the environment's headers (torch's, Python's): the
+#: repositories this module's extension makes see this module's dependencies
+bazel_dep(name = "rules_cc", version = "0.2.28")
