@@ -17,6 +17,7 @@ import hashlib
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -105,8 +106,56 @@ def under_budget(head: list[str], command: str, rest: list[str]) -> int:
         return _wait([*head, command, f"--jobs={jobs}", *rest])
 
 
+#: the gate's report lines a failing run prints: everything but Bazel's progress chatter
+_CHATTER = re.compile(r"^(INFO: |Loading|Analyzing|Target |  bazel-bin)")
+
+
+def commit_gate(workspace: Path) -> int:
+    """THE COMMIT GATE, every RoLA repository's pre-commit hook: `bazel test //:gate` on the commit as git will write
+    it -- the changes not staged for the commit set aside first (and put back after, nothing a check writes kept), and
+    the tree the commit's index (`GIT_INDEX_FILE`, which the tree repository reads when the hook hands it in). It
+    refuses with no `bazel` on PATH: an absent gate that says nothing is indistinguishable from one that passed."""
+    import shutil
+
+    if shutil.which("bazel") is None:
+        print("pre-commit hook: refusing -- no `bazel` on PATH: rola's `python3 tools/bootstrap.py` links the pinned "
+              "bazelisk", file=sys.stderr)
+        return 1
+    git = ["git", "-C", str(workspace)]
+    common = subprocess.run([*git, "rev-parse", "--path-format=absolute", "--git-common-dir"], capture_output=True,
+                            text=True, check=True).stdout.strip()
+    patch = Path(common) / f"gate-unstaged.{os.getpid()}.patch"
+    diff = subprocess.run([*git, "diff", "--binary", "--no-color", "--no-ext-diff", "--ignore-submodules"],
+                          capture_output=True, check=True).stdout
+    patch.write_bytes(diff)
+    try:
+        if diff:
+            subprocess.run([*git, "checkout", "--", "."], check=True)
+        run = subprocess.run(["bazel", "test", "--noshow_progress", "--test_output=errors", "--lockfile_mode=error",
+                              "--repo_env=GIT_INDEX_FILE", "//:gate"], cwd=workspace, capture_output=True, text=True)
+        lines = (run.stdout + run.stderr).splitlines()
+        if run.returncode:
+            print("\n".join(line for line in lines if not _CHATTER.match(line)))
+        print("\n".join(line for line in lines if line.startswith("Executed ")) or "\n".join(lines[-5:]))
+        return run.returncode
+    finally:
+        #: the working tree back to the index first -- nothing a check writes is the author's -- then the author's
+        #: changes
+        if diff:
+            restored = (subprocess.run([*git, "checkout", "--", "."]).returncode == 0
+                        and subprocess.run([*git, "apply", "--whitespace=nowarn", str(patch)]).returncode == 0)
+            if not restored:
+                print(f"pre-commit hook: the changes not staged could not be put back; they are in {patch} (git apply "
+                      "it)", file=sys.stderr)
+                raise SystemExit(1)
+        patch.unlink(missing_ok=True)
+
+
 def main(argv: list[str], workspace: Path) -> int:
-    """The front door for the workspace at `workspace` (the stub's repository)."""
+    """The front door for the workspace at `workspace` (the stub's repository); `--commit-gate`, the commit hook's run
+    of its gate (`commit_gate`)."""
+    if argv == ["--commit-gate"]:
+        return commit_gate(workspace)
     real = os.environ.get("BAZEL_REAL")
     if not real:
         raise SystemExit("bazel/bazel is the graph's front door, which bazelisk runs in Bazel's place: run `bazel`, the "

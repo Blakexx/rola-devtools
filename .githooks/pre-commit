@@ -1,43 +1,6 @@
 #!/usr/bin/env bash
-# rola-devtools' commit gate, in the tree: `core.hooksPath` points a checkout here (per worktree), so the gate is a
-# property of the checked-out files. It runs `bazel test //:gate` on the commit as git will write it: the changes not
-# staged for the commit set aside first, and the tree the commit's index (`GIT_INDEX_FILE`, which the tree repository
-# reads when the hook hands it in). It refuses with no `bazel` on PATH -- an absent gate that says nothing is
-# indistinguishable from one that passed.
+# rola-devtools' commit gate, in the tree: `core.hooksPath` points a checkout here (per worktree). It runs
+# `bazel test //:gate` on the commit as git will write it (`rola_devtools.graph.front_door`'s `commit_gate`, every RoLA
+# repository's), through this workspace's front door.
 set -euo pipefail
-
-if ! command -v bazel >/dev/null 2>&1; then
-  echo "pre-commit hook: refusing -- no \`bazel\` on PATH: rola's \`python3 tools/bootstrap.py\` links the pinned bazelisk" >&2
-  exit 1
-fi
-
-patch="$(git rev-parse --path-format=absolute --git-common-dir)/devtools-gate-unstaged.$$.patch"
-git diff --binary --no-color --no-ext-diff --ignore-submodules >"$patch"
-log="$(mktemp)"
-restore() {
-  rm -f "$log"
-  if [ ! -s "$patch" ]; then
-    rm -f "$patch"
-    return
-  fi
-  #: the working tree back to the index first -- nothing a check writes is the author's -- then the author's changes
-  if git checkout -- . && git apply --whitespace=nowarn "$patch"; then
-    rm -f "$patch"
-    return
-  fi
-  echo "pre-commit hook: refusing -- the changes not staged could not be put back; they are in $patch (git apply it)" >&2
-  exit 1
-}
-trap restore EXIT
-if [ -s "$patch" ]; then
-  git checkout -- .
-fi
-
-status=0
-bazel test --noshow_progress --test_output=errors --lockfile_mode=error --repo_env=GIT_INDEX_FILE //:gate >"$log" 2>&1 \
-  || status=$?
-if [ "$status" -ne 0 ]; then
-  grep -Ev '^(INFO: |Loading|Analyzing|Target |  bazel-bin)' "$log" || true
-fi
-grep -E '^Executed ' "$log" || tail -5 "$log"
-exit "$status"
+exec "$(git rev-parse --show-toplevel)/bazel/bazel" --commit-gate
