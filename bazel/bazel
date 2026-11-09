@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+"""rola-devtools' front door: bazelisk runs this file (the wrapper `.bazeliskrc` names) in place of the Bazel it
+downloaded, and it runs this checkout's own front door (`rola_devtools.graph.front_door`) for this workspace."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from rola_devtools.graph import front_door  # noqa: E402 -- the path insert above must precede it
+
+if __name__ == "__main__":
+    sys.exit(front_door.main(sys.argv[1:], ROOT))

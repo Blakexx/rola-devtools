@@ -1,3 +1,7 @@
 """The environment's store builder, which the environment extension runs (bazel/environment.bzl)."""
 
+load("//bazel:workspace.bzl", "tree_part")
+
 exports_files(["make_env.py"])
+
+tree_part()

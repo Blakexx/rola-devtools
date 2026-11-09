@@ -1,7 +1,8 @@
 {
   "public": "Blakexx/rola-devtools",
-  "ships": [".github", ".githooks", ".gitignore", ".pre-commit-config.yaml", "BUILD.bazel", "LICENSE", "MODULE.bazel",
-            "README.md", "bazel", "pyproject.toml", "rola_devtools", "tests"],
+  "ships": [".bazeliskrc", ".bazelrc", ".bazelversion", ".github", ".githooks", ".gitignore", "BUILD.bazel", "LICENSE",
+            "MODULE.bazel", "MODULE.bazel.lock", "README.md", "bazel", "pins", "pyproject.toml", "requirements.in",
+            "requirements.lock", "rola_devtools", "tests"],
   "private": [".github/workflows/mirror.yml"],
   "allow": {}
 }

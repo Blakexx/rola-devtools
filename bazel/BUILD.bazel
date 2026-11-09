@@ -1,6 +1,10 @@
 """The module's Starlark: the environment extension (environment.bzl) and the generic rules (rules.bzl)."""
 
+load(":workspace.bzl", "tree_part")
+
 exports_files([
     "environment.bzl",
     "rules.bzl",
 ])
+
+tree_part()

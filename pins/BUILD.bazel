@@ -1,0 +1,7 @@
+"""The pins every RoLA workspace shares: uv and the Python it installs (an environment's `uv_pin`)."""
+
+load("//bazel:workspace.bzl", "tree_part")
+
+exports_files(["uv_pin.json"])
+
+tree_part()

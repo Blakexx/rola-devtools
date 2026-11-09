@@ -1,4 +1,66 @@
 """rola-devtools' root package: the files the module's environment extension reads of this checkout (the Python
-package's project file, by which it finds the package's source)."""
+package's project file and the files its install reads), and this workspace's own checks and gate."""
 
-exports_files(["pyproject.toml"])
+load("//bazel:workspace.bzl", "tree_part", "tree_test")
+
+exports_files([
+    "LICENSE",
+    "README.md",
+    "pyproject.toml",
+    "requirements.lock",
+])
+
+#: this package's part of the tree, and the whole tree: every package's tracked files
+tree_part()
+
+filegroup(
+    name = "tree",
+    srcs = [
+        ":tracked",
+        "//bazel:tracked",
+        "//pins:tracked",
+        "//rola_devtools/graph:tracked",
+    ],
+)
+
+tree_test(
+    name = "ruff",
+    size = "small",
+    cmd = ["ruff", "check", "rola_devtools", "tests"],
+    data = [":tree"],
+)
+
+tree_test(
+    name = "ruff_e3",
+    size = "small",
+    #: ruff's blank-line family is preview-gated, so its own invocation
+    cmd = ["ruff", "check", "--preview", "--select", "E3", "rola_devtools", "tests"],
+    data = [":tree"],
+)
+
+tree_test(
+    name = "tests",
+    size = "medium",
+    cmd = ["python3", "-m", "unittest", "discover", "-s", "tests"],
+    data = [":tree"],
+    git = True,
+)
+
+tree_test(
+    name = "mirror_declarations",
+    size = "small",
+    cmd = ["python3", "-m", "rola_devtools.mirror", "--check"],
+    data = [":tree"],
+    git = True,
+)
+
+#: THE GATE: every check this workspace holds; the commit hook runs it (.githooks/pre-commit)
+test_suite(
+    name = "gate",
+    tests = [
+        ":mirror_declarations",
+        ":ruff",
+        ":ruff_e3",
+        ":tests",
+    ],
+)

@@ -1,0 +1,12 @@
+{
+    "name": "uv",
+    "role": "every RoLA workspace's environment builder (rola_devtools' environment extension, its `python` tag): it installs the pinned Python (`python`) and syncs a lock's hash-pinned packages into the machine's shared store, one environment a key. A graph downloads it by this digest.",
+    "upstream": "https://github.com/astral-sh/uv (the release's wheel on PyPI, by PyPI's digest: the wheel carries the uv binary)",
+    "version": "0.12.7",
+    "release_asset": "uv-0.12.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "release_url": "https://files.pythonhosted.org/packages/8a/01/616cc5f80952eef6fa48c5dbd6ea8aeed04a494e7dfbe9f5f65cfcf85ad9/uv-0.12.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "asset_sha256": "4545e87c7ac64af317d8daffd279e23e93b0e05035662363033d3525923339d2",
+    "python": "3.11.13",
+    "archive_root": "uv-0.12.7.data/scripts",
+    "binary_path": "uv"
+}

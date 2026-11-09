@@ -1,0 +1,8 @@
+# rola-devtools' graph environment (MODULE.bazel's `environment.python` tag). The package is standard library only;
+# this lock carries what its gate runs beyond it: ruff, at the version every RoLA repository lints with, and torch at
+# rola's build (the cu13 toolchain's), which the cells' and the diff's tests make tensors with on the device. rola-results, whose store the timing tests
+# write, is pinned by its public commit beside the lock (the tag's `packages`). Compiled with
+# `uv pip compile requirements.in --python-version 3.11 --generate-hashes --extra-index-url
+# https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match -o requirements.lock`.
+ruff==0.14.10
+torch==2.14.0+cu130
