@@ -44,11 +44,21 @@ def _python_impl(rctx):
         rctx.watch_tree(rctx.path(source).dirname)
     packages = []
     if rctx.attr.devtools:
-        #: rola_devtools from this module's own source: the pinned commit's, or the machine's checkout overriding it
+        #: rola_devtools from this module's own source -- the pinned commit's, or the machine's checkout overriding it --
+        #: staged as what its install reads, so the environment's key is the package's and not the repository's tests
         devtools = rctx.path(rctx.attr._devtools).dirname
         rctx.watch_tree(devtools.get_child("rola_devtools"))
-        rctx.watch(rctx.attr._devtools)
-        packages.append(str(devtools))
+        staged = rctx.path("devtools_package")
+        rctx.execute(["rm", "-rf", str(staged)])
+        rctx.execute(["mkdir", "-p", str(staged)])
+        for name in _DEVTOOLS_INSTALLS:
+            source = devtools.get_child(name)
+            if source.exists:
+                rctx.watch_tree(source) if source.is_dir else rctx.watch(source)
+                copied = rctx.execute(["cp", "-rL", str(source), str(staged.get_child(name))])
+                if copied.return_code != 0:
+                    fail("staging %s: %s" % (source, copied.stderr))
+        packages.append(str(staged))
     packages += rctx.attr.packages
     args = [
         rctx.which("python3"),
@@ -90,6 +100,9 @@ def _python_impl(rctx):
     #: command naming it is keyed by the environment
     rctx.file("flags.bzl", facts + "VENV = %s\n" % json.encode(paths["venv"]))
     rctx.file("BUILD.bazel", _build(rctx, _PYTHON_BUILD))
+
+#: what rola_devtools' install reads of its repository: the project file, the files it names, the package
+_DEVTOOLS_INSTALLS = ("pyproject.toml", "LICENSE", "README.md", "rola_devtools")
 
 _python_attrs = {
     "lock": attr.label(mandatory = True, doc = "the hash-pinned lock (`uv pip compile --generate-hashes`)"),
